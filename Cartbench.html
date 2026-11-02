@@ -1,0 +1,607 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Cartbench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Michroma&display=swap">
+<style>
+/* Layout: a walnut-and-black console faceplate. Cart map, bit grid and byte details sit side by side. */
+:root {
+  --walnut: #2b1a10;
+  --walnut-2: #3b2415;
+  --plate: #171210;
+  --plate-2: #211a16;
+  --plate-3: #30261f;
+  --line: #4a3a2e;
+  --ink: #f0e5d4;
+  --muted: #b7a48f;
+  --amber: #f0a63c;
+  --changed: #ff7a59;
+  --pixel-off: #0d0a08;
+  --display: "Michroma", "Eurostile", "Arial", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--plate); color: var(--ink);
+  font: 400 15px/1.4 var(--body);
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+.top {
+  background: repeating-linear-gradient(92deg, var(--walnut) 0 7px, var(--walnut-2) 7px 9px, var(--walnut) 9px 23px, #331f12 23px 24px);
+  border-bottom: 3px solid #000;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+}
+.brand { font: 400 19px/1 var(--display); letter-spacing: .04em; margin: 0; }
+.file { min-width: 0; flex: 1 1 200px; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.file b { font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  background: var(--plate-2); border: 1px solid var(--line); border-radius: 3px;
+  padding: 7px 12px; cursor: pointer; font-weight: 500; font-size: 14px;
+}
+.btn:hover:not(:disabled) { background: var(--plate-3); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: #1c1006; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: #ffbd5e; }
+
+.tools {
+  background: var(--plate-2); border-bottom: 1px solid #000;
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center;
+}
+.tool { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.tool select { background: var(--plate); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; color: var(--ink); }
+.tool input[type=range] { width: 100px; accent-color: var(--amber); }
+.tool input[type=checkbox] { accent-color: var(--amber); width: 16px; height: 16px; margin: 0; }
+.swatch { width: 24px; height: 24px; border: 1px solid var(--ink); border-radius: 3px; padding: 0; cursor: pointer; }
+.colorcode { font-family: var(--mono); color: var(--ink); }
+.popwrap { position: relative; display: flex; gap: 8px; align-items: center; }
+.palette {
+  position: absolute; z-index: 20; top: 32px; left: 0;
+  background: var(--plate); border: 1px solid var(--line); padding: 8px; border-radius: 3px;
+  display: grid; grid-template-columns: repeat(8, 20px); gap: 1px;
+  box-shadow: 0 8px 24px #000a;
+}
+.palette button { width: 20px; height: 14px; border: 0; padding: 0; cursor: pointer; }
+
+.sample {
+  color: #1c1006; background: var(--amber); font-size: 13px; font-weight: 500;
+  padding: 2px 7px; border-radius: 2px;
+}
+
+main {
+  min-height: 0; display: grid; gap: 14px;
+  grid-template-columns: 160px minmax(0, 1fr) 320px;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.col { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+h2 { font: 400 10.5px/1.3 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+
+#map { width: 100%; image-rendering: pixelated; background: var(--pixel-off); border: 1px solid var(--line); cursor: pointer; display: block; }
+
+#scroller { flex: 1; min-height: 0; overflow: auto; background: var(--pixel-off); border: 1px solid var(--line); }
+#spacer { position: relative; min-height: 100%; }
+#grid { position: sticky; top: 0; left: 0; display: block; touch-action: pan-y; cursor: crosshair; }
+
+dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.byte-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#byteInput {
+  width: 60px; background: var(--pixel-off); border: 1px solid var(--line); border-radius: 3px;
+  font: 500 17px var(--mono); padding: 4px 6px; text-transform: uppercase; text-align: center;
+}
+.tiny { padding: 5px 9px; font-size: 13px; }
+.colorchip { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--muted); vertical-align: -1px; }
+
+#hex { font: 400 12.5px/20px var(--mono); font-variant-numeric: tabular-nums; flex: 1; min-height: 120px; overflow: hidden; background: var(--pixel-off); border: 1px solid var(--line); padding: 4px 6px; }
+.hrow { display: flex; white-space: nowrap; }
+.haddr { color: var(--muted); width: 50px; }
+.hrow button { background: none; border: 0; padding: 0; width: 26px; cursor: pointer; font: inherit; text-align: center; }
+.hrow button:hover { background: var(--plate-3); }
+.hrow button.chg { color: var(--changed); }
+.hrow button.sel { background: var(--amber); color: #1c1006; }
+
+#changes { list-style: none; margin: 0; padding: 0; max-height: 116px; overflow: auto; font-size: 13px; }
+#changes li { display: flex; justify-content: space-between; gap: 8px; align-items: center; border-top: 1px solid var(--plate-3); padding: 2px 0; }
+#changes button { background: none; border: 0; cursor: pointer; padding: 2px 0; font: inherit; }
+#changes .jump { font-family: var(--mono); color: var(--changed); text-align: left; }
+#changes .rev { color: var(--muted); text-decoration: underline; }
+
+.foot {
+  background: var(--plate-2); border-top: 1px solid #000; font-size: 13px; color: var(--muted);
+  padding-block: 6px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px;
+}
+#status { color: var(--ink); }
+#status.err { color: var(--changed); font-weight: 500; }
+
+.drop { position: fixed; inset: 0; z-index: 50; background: #000c; display: grid; place-items: center; font: 400 20px var(--display); pointer-events: none; }
+
+@media (max-width: 960px) {
+  html, body { height: auto; }
+  body { display: block; }
+  main { grid-template-columns: minmax(0, 1fr); }
+  #scroller { flex: none; height: 62vh; }
+  .mapcol { order: 2; }
+  #map { max-width: 240px; }
+  #hex { flex: none; height: 200px; }
+}
+</style>
+
+<header class="top">
+  <h1 class="brand">Cartbench</h1>
+  <div class="file" id="fileInfo"></div>
+  <div class="actions">
+    <input id="fileInput" type="file" accept=".bin,.a26,.rom" hidden>
+    <button class="btn" id="openBtn">Open ROM</button>
+    <button class="btn" id="undoBtn">Undo</button>
+    <button class="btn" id="redoBtn">Redo</button>
+    <button class="btn primary" id="exportBtn">Export ROM</button>
+  </div>
+</header>
+
+<div class="tools">
+  <label class="tool" for="bpr">Bytes per row
+    <select id="bpr"><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option></select>
+  </label>
+  <label class="tool" for="zoom">Zoom <input id="zoom" type="range" min="8" max="28" step="2" value="16"></label>
+  <label class="tool" for="flip"><input id="flip" type="checkbox"> Upside down</label>
+  <div class="tool popwrap">Pixel color
+    <button class="swatch" id="swatch" aria-label="Choose pixel color" aria-expanded="false"></button>
+    <span class="colorcode" id="colorCode"></span>
+    <div class="palette" id="palette" hidden></div>
+  </div>
+</div>
+
+<main>
+  <section class="col mapcol">
+    <h2>Cart map</h2>
+    <canvas id="map" aria-label="Overview of the whole ROM. Click to jump."></canvas>
+    <p class="hint">Every byte in the cart. Sprites show up as tidy shapes among the noisy code. Click to jump.</p>
+  </section>
+
+  <section class="col">
+    <h2>Bit grid</h2>
+    <div id="scroller"><div id="spacer"><canvas id="grid" tabindex="0" aria-label="ROM bytes as rows of pixels. Click or drag to draw."></canvas></div></div>
+  </section>
+
+  <section class="col">
+    <h2>Selected byte</h2>
+    <div class="byte-row">
+      <input id="byteInput" maxlength="2" spellcheck="false" autocomplete="off" aria-label="Selected byte in hexadecimal">
+      <button class="btn tiny" id="invertBtn">Invert</button>
+      <button class="btn tiny" id="clearBtn">Clear</button>
+      <button class="btn tiny" id="revertBtn">Restore</button>
+    </div>
+    <dl>
+      <dt>File offset</dt><dd id="iOffset"></dd>
+      <dt>Cart address</dt><dd id="iAddr"></dd>
+      <dt>Binary</dt><dd id="iBin"></dd>
+      <dt>Decimal</dt><dd id="iDec"></dd>
+      <dt>As TIA color</dt><dd id="iColor"></dd>
+    </dl>
+    <h2>Hex</h2>
+    <div id="hex"></div>
+    <h2 id="changesTitle">Changes</h2>
+    <ul id="changes"></ul>
+  </section>
+</main>
+
+<footer class="foot">
+  <span id="status" role="status">Ready</span>
+  <span>Your ROM stays in this browser and is never uploaded.</span>
+</footer>
+<div class="drop" id="drop" hidden>Drop ROM to open</div>
+
+<script>
+"use strict";
+/* NTSC TIA palette: 16 hues, 8 luminance steps. */
+const TIA = ("000000 404040 6c6c6c 909090 b0b0b0 c8c8c8 dcdcdc ececec 444400 646410 848424 a0a034 b8b840 d0d050 e8e85c fcfc68 " +
+"702800 844414 985c28 ac783c bc8c4c cca05c dcb468 ecc878 841800 983418 ac5030 c06848 d0805c e09470 eca880 fcbc94 " +
+"880000 9c2020 b03c3c c05858 d07070 e08888 eca0a0 fcb4b4 78005c 8c2074 a03c88 b0589c c070b0 d084c0 dc9cd0 ecb0e0 " +
+"480078 602090 783ca4 8c58b8 a070cc b484dc c49cec d4b0fc 140084 302098 4c3cac 6858c0 7c70d0 9488e0 a8a0ec bcb4fc " +
+"000088 1c209c 3840b0 505cc0 6874d0 7c8ce0 90a4ec a4b8fc 00187c 1c3890 3854a8 5070bc 6888cc 7c9cdc 90b4ec a4c8fc " +
+"002c5c 1c4c78 386890 5084ac 689cc0 7cb4d4 90cce8 a4e0fc 003c2c 1c5c48 387c64 509c80 68b494 7cd0ac 90e4c0 a4fcd4 " +
+"003c00 205c20 407c40 5c9c5c 74b474 8cd08c a4e4a4 b8fcb8 143800 345c1c 507c38 6c9850 84b468 9ccc7c b4e490 c8fca4 " +
+"2c3000 4c501c 687034 848c4c 9ca864 b4c078 ccd488 e0ec9c 442800 644818 846830 a08444 b89c58 d0b46c e8cc7c fce08c").split(" ").map(c => "#" + c);
+const tiaColor = v => TIA[v >> 1];   // bit 0 of a TIA color is ignored
+
+const $ = id => document.getElementById(id);
+const hex2 = v => v.toString(16).toUpperCase().padStart(2, "0");
+const hex4 = v => v.toString(16).toUpperCase().padStart(4, "0");
+const GUTTER = 66, GAP = 8, HEXCOL = 34;
+
+const S = { name: "", orig: new Uint8Array(0), rom: new Uint8Array(0), sample: false, sel: 0,
+  bpr: 1, px: 16, flip: false, ink: 0x1E, undo: [], redo: [], tx: null, paint: 0, last: null };
+
+/* ---------- Built-in sample: original sprites, not a playable game ---------- */
+function sampleRom() {
+  const r = new Uint8Array(4096);
+  let x = 0x5A;
+  for (let i = 0; i < 0x300; i++) { x = (x * 13 + 41) & 255; r[i] = x; }     // stands in for code
+  const put = (o, rows) => { rows.forEach((s, i) => { r[o + i] = parseInt(s.replace(/\./g, "0").replace(/#/g, "1"), 2); }); };
+  put(0x300, ["...##...","..####..",".######.","##.##.##","########","..#..#..",".#.##.#.","#.#..#.#"]);           // invader
+  put(0x310, ["...##...","...##...","..####..","..#..#..",".######.","########","##.##.##","#..##..#"]);           // rocket
+  put(0x320, ["..####..",".#....#.","#.#..#.#","#......#","#.#..#.#","#..##..#",".#....#.","..####.."]);           // face
+  put(0x330, ["..#..#..","...##...",".######.","##.##.##","########",".######.","..#..#..",".#....#."]);           // robot
+  put(0x340, ["..####..",".#....#.","#.#..#.#","#......#","#.#..#.#","#..##..#",".#....#.","..####.."].reverse()); // upside-down face
+  const digits = [[60,102,110,118,102,102,60,0],[24,56,24,24,24,24,126,0],[60,102,6,28,48,96,126,0],[60,102,6,28,6,102,60,0],[12,28,60,108,126,12,12,0]];
+  digits.forEach((d, i) => d.forEach((b, j) => { r[0x360 + i * 8 + j] = b; }));
+  [0x96,0x34,0x1E,0xC8,0x46,0x0E,0x84,0x2A].forEach((c, i) => { r[0x3A0 + i] = c; });  // color table
+  r[0xFFC] = 0x00; r[0xFFD] = 0xF0; r[0xFFE] = 0x00; r[0xFFF] = 0xF0;       // reset and IRQ vectors
+  return r;
+}
+
+/* ---------- Geometry ---------- */
+const rowCount = () => Math.ceil(S.rom.length / S.bpr);
+const rowOffset = r => (S.flip ? rowCount() - 1 - r : r) * S.bpr;
+const offsetRow = o => { const r = Math.floor(o / S.bpr); return S.flip ? rowCount() - 1 - r : r; };
+
+function hit(e) {
+  const b = gridEl.getBoundingClientRect();
+  const x = e.clientX - b.left + scroller.scrollLeft, y = e.clientY - b.top + scroller.scrollTop;
+  const r = Math.floor(y / S.px);
+  if (r < 0 || r >= rowCount()) return null;
+  const cell = 8 * S.px + GAP;
+  let i = Math.floor((x - GUTTER) / cell);
+  const inBits = x >= GUTTER && i < S.bpr && x - GUTTER - i * cell < 8 * S.px;
+  i = Math.max(0, Math.min(S.bpr - 1, i));
+  const off = rowOffset(r) + i;
+  if (off >= S.rom.length) return null;
+  return { off, bit: inBits ? 7 - Math.floor((x - GUTTER - i * cell) / S.px) : null };
+}
+
+/* ---------- Editing ---------- */
+function setByte(off, val) {
+  if (!S.tx) S.tx = new Map();
+  if (!S.tx.has(off)) S.tx.set(off, S.rom[off]);
+  S.rom[off] = val;
+}
+function commit() {
+  if (!S.tx) return;
+  const list = [...S.tx].filter(([o, b]) => S.rom[o] !== b).map(([o, b]) => [o, b, S.rom[o]]);
+  S.tx = null;
+  if (list.length) { S.undo.push(list); S.redo = []; }
+  draw();
+}
+function step(from, to, idx, word) {
+  const t = from.pop();
+  if (!t) return;
+  t.forEach(e => { S.rom[e[0]] = e[idx]; });
+  to.push(t);
+  S.sel = t[0][0]; ensureVisible(); say(word); draw();
+}
+const undo = () => step(S.undo, S.redo, 1, "Undid the last edit");
+const redo = () => step(S.redo, S.undo, 2, "Redid the edit");
+
+function changeRanges() {
+  const out = []; let start = -1;
+  for (let i = 0; i <= S.rom.length; i++) {
+    const c = i < S.rom.length && S.rom[i] !== S.orig[i];
+    if (c && start < 0) start = i;
+    if (!c && start >= 0) { out.push([start, i - 1]); start = -1; }
+  }
+  return out;
+}
+
+/* ---------- Loading ---------- */
+function describeSize(n) {
+  if (n === 2048) return "2K, no bank switching";
+  if (n === 4096) return "4K, no bank switching";
+  if (n % 4096 === 0) return (n / 1024) + "K, likely " + (n / 4096) + " banks of 4K";
+  return n.toLocaleString() + " bytes, unusual size";
+}
+function open(name, bytes, sample) {
+  Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null });
+  renderInfo(); layout(); scroller.scrollTop = 0;
+  if (sample) { S.sel = 0x300; S.flip = false; $("flip").checked = false; layout(); scroller.scrollTop = 0x2F8 * S.px; }
+  draw();
+}
+function validate(bytes) {
+  if (!bytes.length) return "That file is empty. Choose a .bin or .a26 ROM.";
+  if (bytes[0] === 0x50 && bytes[1] === 0x4B) return "That file is a zip archive. Unzip it, then open the .bin or .a26 inside.";
+  if (bytes.length > 1 << 20) return "That file is over 1 MB, which is too large to be an Atari 2600 ROM.";
+  return null;
+}
+async function loadFile(f) {
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const err = validate(bytes);
+    if (err) return say(err, true);
+    open(f.name, bytes, false);
+    say("Opened " + f.name + ". Sprites are often stored upside down, so try that option if shapes look wrong.");
+  } catch (e) { say("That file could not be read. Try choosing it again.", true); }
+}
+function renderInfo() {
+  const el = $("fileInfo"); el.textContent = "";
+  const b = document.createElement("b"); b.textContent = S.name; el.append(b, " · " + describeSize(S.rom.length) + " ");
+  if (S.sample) { const t = document.createElement("span"); t.className = "sample"; t.textContent = "Sample data, not a playable game"; el.append(t); }
+}
+
+/* ---------- Export: .bin is not an allowed save type here, so the ROM ships in a zip ---------- */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(d) { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = CRC[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStored(name, data) {
+  const fn = new TextEncoder().encode(name), crc = crc32(data), n = fn.length, z = data.length;
+  const out = new Uint8Array(30 + n + z + 46 + n + 22), v = new DataView(out.buffer);
+  const head = (p, central) => {
+    let q = p;
+    if (central) { v.setUint32(q, 0x02014B50, true); v.setUint16(q + 4, 20, true); q += 6; }
+    else { v.setUint32(q, 0x04034B50, true); q += 4; }
+    v.setUint16(q, 20, true); v.setUint16(q + 2, 0x0800, true); v.setUint16(q + 4, 0, true);
+    v.setUint16(q + 6, 0, true); v.setUint16(q + 8, 0x5D61, true);          // fixed date, 2026-11-01
+    v.setUint32(q + 10, crc, true); v.setUint32(q + 14, z, true); v.setUint32(q + 18, z, true);
+    v.setUint16(q + 22, n, true); v.setUint16(q + 24, 0, true);
+    return q + 26;
+  };
+  let p = head(0, false); out.set(fn, p); p += n; out.set(data, p); p += z;
+  const cd = p;
+  p = head(p, true);                 // comment, disk, attrs and local offset stay zero
+  p += 14; out.set(fn, p); p += n;
+  v.setUint32(p, 0x06054B50, true); v.setUint16(p + 8, 1, true); v.setUint16(p + 10, 1, true);
+  v.setUint32(p + 12, p - cd, true); v.setUint32(p + 16, cd, true);
+  return out;
+}
+const baseName = () => (S.name.replace(/\.[^.]*$/, "").replace(/[^\w.-]+/g, "_") || "rom");
+async function exportRom() {
+  const base = baseName() + "-hacked", ext = /\.a26$/i.test(S.name) ? ".a26" : ".bin";
+  const inViewer = !!(window.claude && window.claude.use);
+  if (!inViewer) {          // opened as a plain file: a normal download works
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([S.rom])); a.download = base + ext; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    return say("Exported " + base + ext);
+  }
+  const dl = await window.claude.use("downloads");
+  if (!dl) return say("Saving isn't available in this view. Open the page in claude.ai and try again.", true);
+  try {
+    await dl.save({ filename: base + ".zip", data: new Blob([zipStored(base + ext, S.rom)]) });
+    say("Saved " + base + ".zip. Stella opens it directly. For other emulators, unzip it first.");
+  } catch (e) {
+    if (e && e.code === "declined") say("Export canceled. Your edits are still here.");
+    else if (e && e.code === "rate_limited") say("A save prompt is already open. Finish that one, then try again.", true);
+    else say("The file couldn't be saved. Your edits are still here, so try again.", true);
+  }
+}
+
+/* ---------- Drawing ---------- */
+const scroller = $("scroller"), spacer = $("spacer"), gridEl = $("grid"), mapEl = $("map"), g = gridEl.getContext("2d");
+let queued = false;
+function draw() { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; renderAll(); }); }
+function layout() {
+  spacer.style.height = rowCount() * S.px + "px";
+  spacer.style.width = GUTTER + S.bpr * (8 * S.px + GAP) + S.bpr * HEXCOL + "px";
+  spacer.style.minWidth = "100%";
+}
+function renderGrid() {
+  const W = scroller.clientWidth, H = scroller.clientHeight, d = window.devicePixelRatio || 1;
+  if (gridEl.width !== Math.round(W * d) || gridEl.height !== Math.round(H * d)) {
+    gridEl.width = Math.round(W * d); gridEl.height = Math.round(H * d);
+    gridEl.style.width = W + "px"; gridEl.style.height = H + "px";
+  }
+  g.setTransform(d, 0, 0, d, 0, 0);
+  g.fillStyle = "#0d0a08"; g.fillRect(0, 0, W, H);
+  g.font = '500 12px "IBM Plex Mono", monospace'; g.textBaseline = "middle";
+  const px = S.px, sx = scroller.scrollLeft, sy = scroller.scrollTop, cell = 8 * px + GAP, ink = tiaColor(S.ink);
+  const first = Math.floor(sy / px), last = Math.min(rowCount() - 1, Math.ceil((sy + H) / px));
+  for (let r = first; r <= last; r++) {
+    const y = r * px - sy, base = rowOffset(r);
+    const hasSel = S.sel >= base && S.sel < base + S.bpr;
+    if (hasSel) { g.fillStyle = "#30261f"; g.fillRect(0, y, W, px); }
+    if (px >= 12 || r % 2 === 0) { g.fillStyle = "#b7a48f"; g.fillText("$" + hex4(base), 6 - sx, y + px / 2); }
+    for (let i = 0; i < S.bpr; i++) {
+      const o = base + i; if (o >= S.rom.length) break;
+      const v = S.rom[o], x0 = GUTTER + i * cell - sx, chg = v !== S.orig[o];
+      if (chg) { g.fillStyle = "#ff7a59"; g.fillRect(x0 - 5, y, 3, px); }
+      for (let b = 0; b < 8; b++) {
+        g.fillStyle = v & (128 >> b) ? ink : (r + b) % 2 ? "#1d1612" : "#171210";
+        g.fillRect(x0 + b * px, y, px - 1, px - 1);
+      }
+      if (o === S.sel) { g.strokeStyle = "#f0a63c"; g.lineWidth = 2; g.strokeRect(x0 - 1, y - .5, 8 * px + 1, px + 1); }
+      g.fillStyle = chg ? "#ff7a59" : "#b7a48f";
+      if (px >= 12 || r % 2 === 0) g.fillText(hex2(v), GUTTER + S.bpr * cell + i * HEXCOL - sx, y + px / 2);
+    }
+  }
+}
+function renderMap() {
+  const n = S.rom.length, cols = 16, colBytes = Math.ceil(n / cols), w = cols * 8, h = colBytes;
+  if (mapEl.width !== w || mapEl.height !== h) { mapEl.width = w; mapEl.height = h; }
+  const c = mapEl.getContext("2d"), img = c.createImageData(w, h), D = img.data;
+  const inkHex = tiaColor(S.ink), ir = parseInt(inkHex.slice(1, 3), 16), ig = parseInt(inkHex.slice(3, 5), 16), ib = parseInt(inkHex.slice(5, 7), 16);
+  for (let o = 0; o < n; o++) {
+    const cx = Math.floor(o / colBytes) * 8, y = o % colBytes, chg = S.rom[o] !== S.orig[o];
+    for (let b = 0; b < 8; b++) {
+      const p = (y * w + cx + b) * 4, on = S.rom[o] & (128 >> b);
+      D[p] = on ? (chg ? 255 : ir) : 13; D[p + 1] = on ? (chg ? 122 : ig) : 10; D[p + 2] = on ? (chg ? 89 : ib) : 8; D[p + 3] = 255;
+    }
+  }
+  c.putImageData(img, 0, 0);
+  const s = rowOffset(Math.floor(scroller.scrollTop / S.px));
+  const vis = Math.ceil(scroller.clientHeight / S.px) * S.bpr, top = S.flip ? Math.max(0, s - vis) : s;
+  c.strokeStyle = "#f0a63c"; c.lineWidth = Math.max(1, h / 256);
+  c.strokeRect(Math.floor(top / colBytes) * 8 + .5, top % colBytes + .5, 7, Math.min(vis, colBytes - top % colBytes) - 1);
+}
+function renderHex() {
+  const box = $("hex"), rows = Math.max(4, Math.floor((box.clientHeight - 8) / 20));
+  let top = rowOffset(Math.floor(scroller.scrollTop / S.px));
+  if (S.sel < top || S.sel >= top + rows * 8) top = S.sel;
+  top = Math.max(0, Math.min(top & ~7, Math.max(0, (S.rom.length + 7 & ~7) - rows * 8)));
+  const f = document.createDocumentFragment();
+  for (let r = 0; r < rows; r++) {
+    const base = top + r * 8; if (base >= S.rom.length) break;
+    const row = document.createElement("div"); row.className = "hrow";
+    const a = document.createElement("span"); a.className = "haddr"; a.textContent = "$" + hex4(base); row.append(a);
+    for (let i = 0; i < 8 && base + i < S.rom.length; i++) {
+      const o = base + i, b = document.createElement("button");
+      b.textContent = hex2(S.rom[o]); b.dataset.o = o; b.setAttribute("aria-label", "Byte " + hex4(o));
+      if (S.rom[o] !== S.orig[o]) b.classList.add("chg");
+      if (o === S.sel) b.classList.add("sel");
+      row.append(b);
+    }
+    f.append(row);
+  }
+  box.replaceChildren(f);
+}
+function cartAddress(o) {
+  const n = S.rom.length;
+  if (n === 2048) return "$" + hex4(0xF800 + o);
+  if (n <= 4096) return "$" + hex4(0xF000 + (o & 0xFFF));
+  return "Bank " + Math.floor(o / 4096) + ", $" + hex4(0xF000 + (o & 0xFFF));
+}
+function renderDetails() {
+  const o = S.sel, v = S.rom[o] ?? 0;
+  if (document.activeElement !== $("byteInput") || S.syncInput) { $("byteInput").value = hex2(v); S.syncInput = false; }
+  $("iOffset").textContent = "$" + hex4(o);
+  $("iAddr").textContent = cartAddress(o);
+  $("iBin").textContent = v.toString(2).padStart(8, "0").replace(/(....)/, "$1 ");
+  $("iDec").textContent = v;
+  const chip = document.createElement("span"); chip.className = "colorchip"; chip.style.background = tiaColor(v);
+  $("iColor").replaceChildren(chip, " $" + hex2(v & 0xFE));
+  $("revertBtn").disabled = S.rom[o] === S.orig[o];
+  $("undoBtn").disabled = !S.undo.length; $("redoBtn").disabled = !S.redo.length;
+  const ranges = changeRanges(), total = ranges.reduce((t, r) => t + r[1] - r[0] + 1, 0);
+  $("changesTitle").textContent = total ? "Changes: " + total + (total === 1 ? " byte" : " bytes") : "Changes: none yet";
+  const ul = $("changes"), f = document.createDocumentFragment();
+  ranges.slice(0, 100).forEach(([a, b]) => {
+    const li = document.createElement("li"), j = document.createElement("button"), x = document.createElement("button");
+    j.className = "jump"; j.dataset.jump = a; j.textContent = "$" + hex4(a) + (b > a ? "–$" + hex4(b) : "");
+    x.className = "rev"; x.dataset.a = a; x.dataset.b = b; x.textContent = "Restore";
+    li.append(j, x); f.append(li);
+  });
+  ul.replaceChildren(f);
+}
+function renderAll() { renderGrid(); renderMap(); renderHex(); renderDetails(); }
+
+function ensureVisible() {
+  const y = offsetRow(S.sel) * S.px, h = scroller.clientHeight;
+  if (y < scroller.scrollTop || y + S.px > scroller.scrollTop + h) scroller.scrollTop = y - h / 2;
+}
+function select(o) { S.sel = Math.max(0, Math.min(S.rom.length - 1, o)); ensureVisible(); S.syncInput = true; draw(); }
+function say(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+/* ---------- Grid input ---------- */
+let painting = false;
+function paintAt(h) {
+  if (!h || h.bit === null) return;
+  const v = S.rom[h.off], next = S.paint ? v | (1 << h.bit) : v & ~(1 << h.bit);
+  if (next !== v) setByte(h.off, next);
+  if (S.sel !== h.off) { S.sel = h.off; S.syncInput = true; }
+  draw();
+}
+gridEl.addEventListener("pointerdown", e => {
+  const h = hit(e); if (!h) return;
+  gridEl.focus({ preventScroll: true });
+  S.sel = h.off; S.syncInput = true;
+  if (h.bit !== null) {
+    S.paint = S.rom[h.off] & (1 << h.bit) ? 0 : 1;
+    painting = true; gridEl.setPointerCapture(e.pointerId); paintAt(h);
+  }
+  draw();
+});
+gridEl.addEventListener("pointermove", e => {
+  const h = hit(e);
+  if (painting) paintAt(h);
+  else if (h) $("status").textContent = "$" + hex4(h.off) + (h.bit !== null ? ", bit " + h.bit : "");
+});
+const endPaint = () => { if (painting) { painting = false; commit(); } };
+gridEl.addEventListener("pointerup", endPaint);
+gridEl.addEventListener("pointercancel", endPaint);
+scroller.addEventListener("scroll", draw, { passive: true });
+window.addEventListener("resize", draw);
+
+function arrow(key) {
+  const d = { ArrowUp: S.flip ? S.bpr : -S.bpr, ArrowDown: S.flip ? -S.bpr : S.bpr, ArrowLeft: -1, ArrowRight: 1 }[key];
+  if (d) { select(S.sel + d); return true; }
+  return false;
+}
+document.addEventListener("keydown", e => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
+  if (document.activeElement === gridEl) {
+    if (arrow(e.key)) e.preventDefault();
+    else if (/^[0-9a-fA-F]$/.test(e.key) && !mod) { $("byteInput").focus(); $("byteInput").value = ""; }
+  }
+});
+
+/* ---------- Byte controls ---------- */
+const byteInput = $("byteInput");
+byteInput.addEventListener("focus", () => byteInput.select());
+byteInput.addEventListener("input", () => {
+  byteInput.value = byteInput.value.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+  if (byteInput.value.length === 2) {
+    setByte(S.sel, parseInt(byteInput.value, 16)); commit();
+    select(S.sel + 1); renderDetails(); byteInput.select();
+  }
+});
+byteInput.addEventListener("blur", () => { S.syncInput = true; draw(); });
+byteInput.addEventListener("keydown", e => {
+  if (e.key.startsWith("Arrow")) { e.preventDefault(); arrow(e.key); renderDetails(); byteInput.select(); }
+});
+$("invertBtn").onclick = () => { setByte(S.sel, S.rom[S.sel] ^ 255); S.syncInput = true; commit(); };
+$("clearBtn").onclick = () => { setByte(S.sel, 0); S.syncInput = true; commit(); };
+$("revertBtn").onclick = () => { setByte(S.sel, S.orig[S.sel]); S.syncInput = true; commit(); };
+$("hex").addEventListener("click", e => { const o = e.target.dataset.o; if (o !== undefined) { select(+o); byteInput.focus(); } });
+$("changes").addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.jump !== undefined) select(+t.dataset.jump);
+  if (t.dataset.a !== undefined) { for (let i = +t.dataset.a; i <= +t.dataset.b; i++) setByte(i, S.orig[i]); S.syncInput = true; commit(); say("Restored the original bytes"); }
+});
+$("map").addEventListener("click", e => {
+  const b = mapEl.getBoundingClientRect(), colBytes = mapEl.height;
+  const col = Math.min(15, Math.floor((e.clientX - b.left) / b.width * 16));
+  const y = Math.floor((e.clientY - b.top) / b.height * colBytes);
+  select(Math.min(S.rom.length - 1, col * colBytes + y));
+});
+
+/* ---------- Toolbar ---------- */
+$("undoBtn").onclick = undo; $("redoBtn").onclick = redo; $("exportBtn").onclick = exportRom;
+$("openBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
+$("bpr").onchange = e => { S.bpr = +e.target.value; layout(); ensureVisible(); draw(); };
+$("zoom").oninput = e => { S.px = +e.target.value; layout(); ensureVisible(); draw(); };
+$("flip").onchange = e => { S.flip = e.target.checked; ensureVisible(); draw(); };
+function setInk(v) { S.ink = v; $("swatch").style.background = tiaColor(v); $("colorCode").textContent = "$" + hex2(v); draw(); }
+const pal = $("palette");
+for (let h = 0; h < 16; h++) for (let l = 0; l < 8; l++) {
+  const v = h << 4 | l << 1, b = document.createElement("button");
+  b.style.background = tiaColor(v); b.dataset.v = v; b.setAttribute("aria-label", "TIA color " + hex2(v)); pal.append(b);
+}
+$("swatch").onclick = e => { e.stopPropagation(); pal.hidden = !pal.hidden; $("swatch").setAttribute("aria-expanded", !pal.hidden); };
+pal.onclick = e => { if (e.target.dataset.v) setInk(+e.target.dataset.v); };
+document.addEventListener("click", () => { pal.hidden = true; $("swatch").setAttribute("aria-expanded", "false"); });
+
+let dragDepth = 0;
+addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; $("drop").hidden = false; });
+addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").hidden = true; } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e => {
+  e.preventDefault(); dragDepth = 0; $("drop").hidden = true;
+  const f = e.dataTransfer.files[0]; if (f) loadFile(f);
+});
+
+setInk(S.ink);
+open("Sample cart", sampleRom(), true);
+say("Sample loaded. Click a pixel to change it, or open your own ROM.");
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+</script>
+
+</body></html>
