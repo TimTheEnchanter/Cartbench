@@ -101,6 +101,41 @@ h2 { font: 400 10.5px/1.3 var(--display); letter-spacing: .1em; text-transform: 
 #speed { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
 #map { flex: none; width: 100%; image-rendering: pixelated; background: var(--pixel-off); border: 1px solid var(--line); cursor: pointer; display: block; }
 
+.tabs { display: flex; gap: 4px; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 2px 8px 4px; cursor: pointer; font: 400 10.5px/1.3 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tab:first-child { padding-left: 0; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--amber); }
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.codewrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 12px; }
+#codeScroll { min-height: 0; overflow: auto; background: var(--pixel-off); border: 1px solid var(--line); position: relative; }
+#codeSpacer { position: relative; min-width: 100%; }
+#codeWin { position: absolute; left: 0; right: 0; min-width: 330px; }
+.crow { display: flex; height: 20px; align-items: center; font: 400 12.5px/20px var(--mono); padding-right: 8px; white-space: nowrap; cursor: pointer; }
+.crow:hover { background: var(--plate-2); }
+.crow.on { background: var(--plate-3); box-shadow: inset 2px 0 var(--amber); }
+.crow.data { color: var(--muted); }
+.crow.chg .ci, .crow.chg .cb { color: var(--changed); }
+.ca { width: 62px; flex: none; color: var(--muted); white-space: pre; }
+.cb { width: 76px; flex: none; color: var(--muted); }
+.ci { flex: 1; }
+.crow.data .cb { display: none; }
+.ci button { background: none; border: 0; padding: 0; font: inherit; color: var(--amber); cursor: pointer; text-decoration: underline; }
+.finds { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.findlist { display: flex; flex-direction: column; }
+.findlist button { background: none; border: 0; border-top: 1px solid var(--plate-3); color: var(--ink); text-align: left; padding: 4px 0; cursor: pointer; font-size: 13px; }
+.findlist button:hover { color: var(--amber); }
+.cmpbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cmpwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; }
+#cmpList { min-height: 0; overflow: auto; }
+.cmprow { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--plate-3); }
+.cmprow.on { background: var(--plate-3); }
+.cmprow button { background: none; border: 0; cursor: pointer; padding: 5px 6px; font: inherit; font-size: 13px; }
+.cmprow .jump { font-family: var(--mono); text-align: left; flex: 1; white-space: pre-wrap; }
+.cmprow .rev { color: var(--muted); text-decoration: underline; }
+#cmpPreview { display: flex; gap: 14px; overflow-y: auto; align-items: flex-start; }
+#cmpPreview figure { margin: 0; display: flex; flex-direction: column; gap: 4px; width: 104px; }
+#cmpPreview figcaption { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+#cmpPreview canvas { width: 57px; image-rendering: pixelated; border: 1px solid var(--line); }
 #scroller { flex: 1; min-height: 0; overflow: auto; background: var(--pixel-off); border: 1px solid var(--line); }
 #spacer { position: relative; min-height: 100%; }
 #grid { position: sticky; top: 0; left: 0; display: block; touch-action: pan-y; cursor: crosshair; }
@@ -150,7 +185,10 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
   html, body { height: auto; }
   body { display: block; }
   main { grid-template-columns: minmax(0, 1fr); }
-  #scroller { flex: none; height: 62vh; }
+  #scroller, .codewrap, .cmpwrap { flex: none; }
+  #scroller, #codeScroll { height: 62vh; }
+  .codewrap, .cmpwrap { grid-template-columns: minmax(0, 1fr); }
+  #cmpList { max-height: 40vh; }
   .mapcol { order: 2; }
   #map { max-width: 240px; }
   #hex { flex: none; height: 200px; }
@@ -184,6 +222,7 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
 
 <main>
   <section class="col mapcol">
+    <div class="col" id="emuPanel" style="flex:none">
     <h2>Screen</h2>
     <div id="screenWrap" tabindex="0" aria-label="Game screen. Focus here to play with the keyboard."><canvas id="screen"></canvas><div id="screenMsg">Starting the emulator…</div></div>
     <div class="emu-row">
@@ -199,14 +238,50 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
     </div>
     <label class="tool" for="autoRun"><input id="autoRun" type="checkbox" checked> Restart game after each edit</label>
     <p class="hint">Click the screen to play: arrow keys and Space.</p>
+    </div>
     <h2>Cart map</h2>
     <canvas id="map" aria-label="Overview of the whole ROM. Click to jump."></canvas>
     <p class="hint">Every byte in the cart. Sprites look like tidy shapes among noisy code. Click to jump.</p>
   </section>
 
   <section class="col">
-    <h2>Bit grid</h2>
-    <div id="scroller"><div id="spacer"><canvas id="grid" tabindex="0" aria-label="ROM bytes as rows of pixels. Click or drag to draw."></canvas></div></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="grid" aria-selected="true">Bit grid</button>
+      <button class="tab" role="tab" data-view="code" aria-selected="false">Code</button>
+      <button class="tab" role="tab" data-view="compare" aria-selected="false">Compare</button>
+    </div>
+    <div class="view" id="gridView">
+      <div id="scroller"><div id="spacer"><canvas id="grid" tabindex="0" aria-label="ROM bytes as rows of pixels. Click or drag to draw."></canvas></div></div>
+    </div>
+    <div class="view" id="codeView" hidden>
+      <div class="cmpbar"><span class="hint" id="codeSummary"></span><button class="btn tiny" id="sourceBtn">Export source</button></div>
+      <div class="codewrap">
+        <div id="codeScroll"><div id="codeSpacer"><div id="codeWin"></div></div></div>
+        <div class="finds">
+          <h2>Colors set in code</h2>
+          <div class="findlist" id="colorList"></div>
+          <p class="hint" id="colorEmpty" hidden>No fixed color values found.</p>
+          <h2>Tables code reads</h2>
+          <div class="findlist" id="tableList"></div>
+          <p class="hint" id="tableEmpty" hidden>No tables found.</p>
+          <p class="hint">These are best guesses from the code. Addresses in the lists are file offsets. Jump tables and bank changes aren't followed, so if code shows as data, select its first byte and press Trace.</p>
+        </div>
+      </div>
+    </div>
+    <div class="view" id="compareView" hidden>
+      <input id="cmpInput" type="file" accept=".bin,.a26,.rom" hidden>
+      <div id="cmpEmpty" hidden><p class="hint">Open a second ROM, such as an existing hack, to see which bytes differ from yours.</p><button class="btn" id="cmpEmptyBtn">Choose ROM to compare</button></div>
+      <div class="view" id="cmpBody">
+        <div class="cmpbar"><span class="hint" id="cmpSummary"></span><button class="btn tiny" id="applyAllBtn">Apply all</button><button class="btn tiny" id="cmpOpenBtn">Choose another ROM</button></div>
+        <div class="cmpwrap">
+          <div id="cmpList"></div>
+          <div id="cmpPreview">
+            <figure><canvas id="cmpA"></canvas><figcaption>Your ROM</figcaption></figure>
+            <figure><canvas id="cmpB"></canvas><figcaption id="cmpBLabel"></figcaption></figure>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="col">
@@ -216,12 +291,14 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
       <button class="btn tiny" id="invertBtn">Invert</button>
       <button class="btn tiny" id="clearBtn">Clear</button>
       <button class="btn tiny" id="revertBtn">Restore</button>
+      <button class="btn tiny" id="traceBtn">Trace</button>
     </div>
     <dl>
       <dt>File offset</dt><dd id="iOffset"></dd>
       <dt>Cart address</dt><dd id="iAddr"></dd>
       <dt>Binary</dt><dd id="iBin"></dd>
       <dt>Decimal</dt><dd id="iDec"></dd>
+      <dt>Traced as</dt><dd id="iKind"></dd>
       <dt>As TIA color</dt><dd id="iColor"></dd>
     </dl>
     <h2>Hex</h2>
@@ -233,7 +310,7 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
 
 <footer class="foot">
   <span id="status" role="status">Ready</span>
-  <span>Your ROM stays in this browser and is never uploaded. Emulation by <a href="https://github.com/6502ts/6502.ts" style="color:inherit">Stellerator</a>, MIT license.</span>
+  <span>Your ROM stays in this browser and is never uploaded.<span id="emuCredit"> Emulation by <a href="https://github.com/6502ts/6502.ts" style="color:inherit">Stellerator</a>, MIT license.</span></span>
 </footer>
 <div class="drop" id="drop" hidden>Drop ROM to open</div>
 
@@ -257,7 +334,8 @@ const hex4 = v => v.toString(16).toUpperCase().padStart(4, "0");
 const GUTTER = 66, GAP = 8, HEXCOL = 34;
 
 const S = { name: "", orig: new Uint8Array(0), rom: new Uint8Array(0), sample: false, sel: 0,
-  bpr: 1, px: 16, flip: false, ink: 0x1E, undo: [], redo: [], tx: null, paint: 0, last: null };
+  bpr: 1, px: 16, flip: false, ink: 0x1E, undo: [], redo: [], tx: null, paint: 0, last: null,
+  view: "grid", entries: new Set(), dis: null, cmp: null, cmpSel: 0 };
 
 /* ---------- Built-in sample: a tiny original program. Joystick moves the invader. ---------- */
 const SAMPLE_CODE = "78d8a2ff9aa9009500cad0fba94c8581a9328580a90285018500850285028502a9008500a92b8d9602ada0f38509ada2f38506ada3f38507ad80020ab002e6800ab002c6800ab002e6810ab002c681a580c9c89004a9008580c9989004a9978580a580a20020c0f0a96ea20120c0f08502852aad8402d0fb85028501a2008a38e581c910b0094aa8b900f39004b002a9008502851b8a38e958c910b0094aa8b910f39004b002a900851ce8e0c0d0cfa9028501a9238d9602ad8402d0fb4c14f0850238e90fb0fc49070a0a0a0a9520951060";
@@ -277,6 +355,13 @@ function sampleRom() {
   [0x96,0x34,0x1E,0xC8,0x46,0x0E,0x84,0x2A].forEach((c, i) => { r[0x3A0 + i] = c; });  // color table
   r[0xFFC] = 0x00; r[0xFFD] = 0xF0; r[0xFFE] = 0x00; r[0xFFF] = 0xF0;       // reset and IRQ vectors
   return r;
+}
+
+function sampleHack(rom) {
+  const h = rom.slice();
+  [0x3C,0x7E,0xDB,0xFF,0x66,0x3C,0x18,0x24].forEach((v, i) => { h[0x300 + i] = v; });   // redrawn invader
+  h[0x3A0] = 0x84; h[0x3A2] = 0x3E;                                                      // new colors
+  return h;
 }
 
 /* ---------- Geometry ---------- */
@@ -339,7 +424,9 @@ function describeSize(n) {
   return n.toLocaleString() + " bytes, unusual size";
 }
 function open(name, bytes, sample) {
-  Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null });
+  Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null, entries: new Set(), cmpSel: 0 });
+  S.cmp = sample ? { name: "Sample hack", bytes: sampleHack(bytes) } : null;
+  runDis();
   renderInfo(); layout(); scroller.scrollTop = 0;
   if (sample) { S.sel = 0x300; S.flip = false; $("flip").checked = false; layout(); scroller.scrollTop = 0x2F8 * S.px; }
   runRom();
@@ -391,25 +478,28 @@ function zipStored(name, data) {
   return out;
 }
 const baseName = () => (S.name.replace(/\.[^.]*$/, "").replace(/[^\w.-]+/g, "_") || "rom");
-async function exportRom() {
-  const base = baseName() + "-hacked", ext = /\.a26$/i.test(S.name) ? ".a26" : ".bin";
-  const inViewer = !!(window.claude && window.claude.use);
-  if (!inViewer) {          // opened as a plain file: a normal download works
+async function saveFile(name, bytes, done) {
+  const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : undefined;
+  if (dl === undefined) {       // opened outside the viewer: a normal download works
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([S.rom])); a.download = base + ext; a.click();
+    a.href = URL.createObjectURL(new Blob([bytes])); a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    return say("Exported " + base + ext);
+    return say(done);
   }
-  const dl = await window.claude.use("downloads");
   if (!dl) return say("Saving isn't available in this view. Open the page in claude.ai and try again.", true);
   try {
-    await dl.save({ filename: base + ".zip", data: new Blob([zipStored(base + ext, S.rom)]) });
-    say("Saved " + base + ".zip. Stella opens it directly. For other emulators, unzip it first.");
+    await dl.save({ filename: name, data: new Blob([bytes]) });
+    say(done);
   } catch (e) {
     if (e && e.code === "declined") say("Export canceled. Your edits are still here.");
     else if (e && e.code === "rate_limited") say("A save prompt is already open. Finish that one, then try again.", true);
     else say("The file couldn't be saved. Your edits are still here, so try again.", true);
   }
+}
+function exportRom() {
+  const base = baseName() + "-hacked", ext = /\.a26$/i.test(S.name) ? ".a26" : ".bin";
+  if (window.claude && window.claude.use) return saveFile(base + ".zip", zipStored(base + ext, S.rom), "Saved " + base + ".zip. Stella opens it directly. For other emulators, unzip it first.");
+  return saveFile(base + ext, S.rom, "Exported " + base + ext);
 }
 
 /* ---------- Drawing ---------- */
@@ -422,6 +512,7 @@ function layout() {
   spacer.style.minWidth = "100%";
 }
 function renderGrid() {
+  if (S.view !== "grid") return;
   const W = scroller.clientWidth, H = scroller.clientHeight, d = window.devicePixelRatio || 1;
   if (gridEl.width !== Math.round(W * d) || gridEl.height !== Math.round(H * d)) {
     gridEl.width = Math.round(W * d); gridEl.height = Math.round(H * d);
@@ -464,6 +555,7 @@ function renderMap() {
     }
   }
   c.putImageData(img, 0, 0);
+  if (S.view !== "grid") { c.fillStyle = "#f0a63c"; c.fillRect(Math.floor(S.sel / colBytes) * 8, S.sel % colBytes, 8, Math.max(1, h / 128)); return; }
   const s = rowOffset(Math.floor(scroller.scrollTop / S.px));
   const vis = Math.ceil(scroller.clientHeight / S.px) * S.bpr, top = S.flip ? Math.max(0, s - vis) : s;
   c.strokeStyle = "#f0a63c"; c.lineWidth = Math.max(1, h / 256);
@@ -471,7 +563,7 @@ function renderMap() {
 }
 function renderHex() {
   const box = $("hex"), rows = Math.max(4, Math.floor((box.clientHeight - 8) / 20));
-  let top = rowOffset(Math.floor(scroller.scrollTop / S.px));
+  let top = S.view === "grid" ? rowOffset(Math.floor(scroller.scrollTop / S.px)) : S.sel;
   if (S.sel < top || S.sel >= top + rows * 8) top = S.sel;
   top = Math.max(0, Math.min(top & ~7, Math.max(0, (S.rom.length + 7 & ~7) - rows * 8)));
   const f = document.createDocumentFragment();
@@ -503,6 +595,7 @@ function renderDetails() {
   $("iAddr").textContent = cartAddress(o);
   $("iBin").textContent = v.toString(2).padStart(8, "0").replace(/(....)/, "$1 ");
   $("iDec").textContent = v;
+  $("iKind").textContent = !S.dis ? "" : S.dis.mark[o] === 1 ? "Code, instruction start" : S.dis.mark[o] === 2 ? "Code, operand" : "Data";
   const chip = document.createElement("span"); chip.className = "colorchip"; chip.style.background = tiaColor(v);
   $("iColor").replaceChildren(chip, " $" + hex2(v & 0xFE));
   $("revertBtn").disabled = S.rom[o] === S.orig[o];
@@ -518,13 +611,18 @@ function renderDetails() {
   });
   ul.replaceChildren(f);
 }
-function renderAll() { renderGrid(); renderMap(); renderHex(); renderDetails(); }
+function renderAll() {
+  renderGrid(); renderMap(); renderHex(); renderDetails();
+  if (S.view === "code") renderCode();
+  if (S.view === "compare") renderCompare();
+}
 
 function ensureVisible() {
+  if (S.view !== "grid") return;
   const y = offsetRow(S.sel) * S.px, h = scroller.clientHeight;
   if (y < scroller.scrollTop || y + S.px > scroller.scrollTop + h) scroller.scrollTop = y - h / 2;
 }
-function select(o) { S.sel = Math.max(0, Math.min(S.rom.length - 1, o)); ensureVisible(); S.syncInput = true; draw(); }
+function select(o) { S.sel = Math.max(0, Math.min(S.rom.length - 1, o)); if (S.view === "grid") ensureVisible(); if (S.view === "code") revealCode(); S.syncInput = true; draw(); }
 function say(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
 
 /* ---------- Grid input ---------- */
@@ -628,12 +726,339 @@ addEventListener("drop", e => {
   const f = e.dataTransfer.files[0]; if (f) loadFile(f);
 });
 
+/* ---------- Disassembler: traces code from the reset vector, like DiStella ---------- */
+const OPTABLE = ("brk imp|ora izx|*kil imp|*slo izx|*nop zp|ora zp|asl zp|*slo zp|php imp|ora imm|asl imp|*anc imm|*nop abs|ora abs|asl abs|*slo abs|" +
+"bpl rel|ora izy|*kil imp|*slo izy|*nop zpx|ora zpx|asl zpx|*slo zpx|clc imp|ora aby|*nop imp|*slo aby|*nop abx|ora abx|asl abx|*slo abx|" +
+"jsr abs|and izx|*kil imp|*rla izx|bit zp|and zp|rol zp|*rla zp|plp imp|and imm|rol imp|*anc imm|bit abs|and abs|rol abs|*rla abs|" +
+"bmi rel|and izy|*kil imp|*rla izy|*nop zpx|and zpx|rol zpx|*rla zpx|sec imp|and aby|*nop imp|*rla aby|*nop abx|and abx|rol abx|*rla abx|" +
+"rti imp|eor izx|*kil imp|*sre izx|*nop zp|eor zp|lsr zp|*sre zp|pha imp|eor imm|lsr imp|*alr imm|jmp abs|eor abs|lsr abs|*sre abs|" +
+"bvc rel|eor izy|*kil imp|*sre izy|*nop zpx|eor zpx|lsr zpx|*sre zpx|cli imp|eor aby|*nop imp|*sre aby|*nop abx|eor abx|lsr abx|*sre abx|" +
+"rts imp|adc izx|*kil imp|*rra izx|*nop zp|adc zp|ror zp|*rra zp|pla imp|adc imm|ror imp|*arr imm|jmp ind|adc abs|ror abs|*rra abs|" +
+"bvs rel|adc izy|*kil imp|*rra izy|*nop zpx|adc zpx|ror zpx|*rra zpx|sei imp|adc aby|*nop imp|*rra aby|*nop abx|adc abx|ror abx|*rra abx|" +
+"*nop imm|sta izx|*nop imm|*sax izx|sty zp|sta zp|stx zp|*sax zp|dey imp|*nop imm|txa imp|*xaa imm|sty abs|sta abs|stx abs|*sax abs|" +
+"bcc rel|sta izy|*kil imp|*ahx izy|sty zpx|sta zpx|stx zpy|*sax zpy|tya imp|sta aby|txs imp|*tas aby|*shy abx|sta abx|*shx aby|*ahx aby|" +
+"ldy imm|lda izx|ldx imm|*lax izx|ldy zp|lda zp|ldx zp|*lax zp|tay imp|lda imm|tax imp|*lax imm|ldy abs|lda abs|ldx abs|*lax abs|" +
+"bcs rel|lda izy|*kil imp|*lax izy|ldy zpx|lda zpx|ldx zpy|*lax zpy|clv imp|lda aby|tsx imp|*las aby|ldy abx|lda abx|ldx aby|*lax aby|" +
+"cpy imm|cmp izx|*nop imm|*dcp izx|cpy zp|cmp zp|dec zp|*dcp zp|iny imp|cmp imm|dex imp|*axs imm|cpy abs|cmp abs|dec abs|*dcp abs|" +
+"bne rel|cmp izy|*kil imp|*dcp izy|*nop zpx|cmp zpx|dec zpx|*dcp zpx|cld imp|cmp aby|*nop imp|*dcp aby|*nop abx|cmp abx|dec abx|*dcp abx|" +
+"cpx imm|sbc izx|*nop imm|*isc izx|cpx zp|sbc zp|inc zp|*isc zp|inx imp|sbc imm|nop imp|*sbc imm|cpx abs|sbc abs|inc abs|*isc abs|" +
+"beq rel|sbc izy|*kil imp|*isc izy|*nop zpx|sbc zpx|inc zpx|*isc zpx|sed imp|sbc aby|*nop imp|*isc aby|*nop abx|sbc abx|inc abx|*isc abx").split("|").map(e => {
+  const [m, mode] = e.split(" "), illegal = m[0] === "*";
+  return { mn: illegal ? m.slice(1) : m, mode, illegal, len: mode === "imp" ? 1 : /^(abs|abx|aby|ind)$/.test(mode) ? 3 : 2 };
+});
+const TIA_W = "VSYNC VBLANK WSYNC RSYNC NUSIZ0 NUSIZ1 COLUP0 COLUP1 COLUPF COLUBK CTRLPF REFP0 REFP1 PF0 PF1 PF2 RESP0 RESP1 RESM0 RESM1 RESBL AUDC0 AUDC1 AUDF0 AUDF1 AUDV0 AUDV1 GRP0 GRP1 ENAM0 ENAM1 ENABL HMP0 HMP1 HMM0 HMM1 HMBL VDELP0 VDELP1 VDELBL RESMP0 RESMP1 HMOVE HMCLR CXCLR".split(" ");
+const TIA_R = "CXM0P CXM1P CXP0FB CXP1FB CXM0FB CXM1FB CXBLPF CXPPMM INPT0 INPT1 INPT2 INPT3 INPT4 INPT5".split(" ");
+const RIOT = { 0x280: "SWCHA", 0x281: "SWACNT", 0x282: "SWCHB", 0x283: "SWBCNT", 0x284: "INTIM", 0x285: "TIMINT", 0x294: "TIM1T", 0x295: "TIM8T", 0x296: "TIM64T", 0x297: "T1024T" };
+const WRITES = new Set("sta stx sty sax inc dec asl lsr rol ror slo rla sre rra dcp isc".split(" "));
+function regName(a, write) {
+  if (a in RIOT) return RIOT[a];
+  if (write) return a < 0x2D ? TIA_W[a] : null;
+  if (a < 14) return TIA_R[a];
+  if (a >= 0x30 && a < 0x3E) return TIA_R[a - 0x30] + "+$30";     // common mirror
+  return null;
+}
+function bankOf(off) {
+  const n = S.rom.length;
+  if (n <= 2048) return { start: 0, end: n, base: 0x10000 - 2048, mask: 2047 };
+  const start = off - off % 4096;
+  return { start, end: Math.min(start + 4096, n), base: 0xF000, mask: 4095 };
+}
+function toOffset(addr, b) {
+  if (!(addr & 0x1000)) return null;
+  const o = b.start + (addr & b.mask);
+  return o < b.end ? o : null;
+}
+function trace() {
+  const n = S.rom.length, r = S.rom, mark = new Uint8Array(n), labels = new Set();
+  for (let bs = 0; bs < n; bs = bankOf(bs).end) {
+    const b = bankOf(bs), stack = [];
+    for (const v of [b.end - 4, b.end - 2]) if (v >= b.start) {
+      const t = toOffset(r[v] | r[v + 1] << 8, b); if (t !== null) { stack.push(t); labels.add(t); }
+    }
+    for (const e of S.entries) if (e >= b.start && e < b.end) { stack.push(e); labels.add(e); }
+    while (stack.length) {
+      let o = stack.pop();
+      for (;;) {
+        if (o >= b.end || mark[o] === 2) break;
+        if (mark[o] === 1) break;
+        const op = OPTABLE[r[o]];
+        if (op.mn === "kil" || o + op.len > b.end) break;
+        let clash = false;
+        for (let i = 1; i < op.len; i++) if (mark[o + i] === 1) clash = true;
+        if (clash) break;
+        mark[o] = 1; for (let i = 1; i < op.len; i++) mark[o + i] = 2;
+        const addr = b.base + (o - b.start);
+        if (op.mode === "rel") {
+          const t = toOffset((addr + 2 + (r[o + 1] << 24 >> 24)) & 0xFFFF, b);
+          if (t !== null) { stack.push(t); labels.add(t); }
+        } else if (op.mn === "jsr" || (op.mn === "jmp" && op.mode === "abs")) {
+          const t = toOffset(r[o + 1] | r[o + 2] << 8, b);
+          if (t !== null) { stack.push(t); labels.add(t); }
+        }
+        if (op.mn === "jmp" || op.mn === "rts" || op.mn === "rti" || op.mn === "brk") break;
+        o += op.len;
+      }
+    }
+  }
+  return { mark, labels };
+}
+function disassemble() {
+  const n = S.rom.length, r = S.rom, { mark, labels } = trace(), items = [];
+  let codeBytes = 0, o = 0;
+  while (o < n) {
+    const b = bankOf(o), addr = b.base + (o - b.start);
+    if (mark[o] === 1) {
+      const op = OPTABLE[r[o]], len = op.len, v1 = r[o + 1], v2 = v1 | r[o + 2] << 8, it = { off: o, len, addr, code: true, label: labels.has(o), op, target: null };
+      const w = WRITES.has(op.mn);
+      const nm = a => regName(a, w) || (a < 0x100 ? "$" + hex2(a) : "$" + hex4(a));
+      const rom = a => { const t = toOffset(a, b); if (t !== null) { it.target = t; return "$" + hex4(a); } return nm(a); };
+      switch (op.mode) {
+        case "imp": it.arg = ""; break;
+        case "imm": it.arg = "#$" + hex2(v1); break;
+        case "zp": it.arg = nm(v1); break;
+        case "zpx": it.arg = nm(v1) + ",X"; break;
+        case "zpy": it.arg = nm(v1) + ",Y"; break;
+        case "izx": it.arg = "($" + hex2(v1) + ",X)"; break;
+        case "izy": it.arg = "($" + hex2(v1) + "),Y"; break;
+        case "abs": it.arg = rom(v2); break;
+        case "abx": it.arg = rom(v2) + ",X"; break;
+        case "aby": it.arg = rom(v2) + ",Y"; break;
+        case "ind": it.arg = "(" + rom(v2) + ")"; break;
+        case "rel": it.arg = rom((addr + 2 + (v1 << 24 >> 24)) & 0xFFFF); break;
+      }
+      codeBytes += len; items.push(it); o += len;
+    } else {
+      let e = o + 1;
+      while (e < b.end && e % 8 !== 0 && mark[e] === 0 && !labels.has(e)) e++;
+      items.push({ off: o, len: e - o, addr, code: false, label: labels.has(o) });
+      o = e;
+    }
+  }
+  const finds = scanFinds(items, mark);
+  S.dis = { mark, items, codeBytes, ...finds };
+}
+const COLOR_REGS = new Set(["COLUP0", "COLUP1", "COLUPF", "COLUBK"]), GFX_REGS = new Set(["GRP0", "GRP1", "ENAM0", "ENAM1", "ENABL"]), PF_REGS = new Set(["PF0", "PF1", "PF2"]);
+function scanFinds(items, mark) {
+  const n = S.rom.length, colors = new Map(), tables = new Map(), recent = { a: [], x: [], y: [] };
+  const addTable = (off, kind, by) => {
+    const t = tables.get(off);
+    if (!t) tables.set(off, { off, kind, by });
+    else if (t.kind === "Data") { t.kind = kind; t.by = by; }
+  };
+  for (const it of items) {
+    if (!it.code) continue;
+    const { mn, mode } = it.op;
+    if (mn === "jmp" || mn === "rts" || mn === "rti") { recent.a = []; recent.x = []; recent.y = []; continue; }
+    if (mn === "lda" || mn === "ldx" || mn === "ldy" || (mn === "lax" && !it.op.illegal)) {
+      const k = recent[mn[2]], t = it.target;
+      if (mode === "imm") k.push({ imm: it.off + 1 });
+      else if (t !== null && mark[t] === 0) { k.push({ table: t, at: it.addr }); addTable(t, "Data", it.addr); }
+      if (k.length > 3) k.shift();
+      continue;
+    }
+    if ((mn === "sta" || mn === "stx" || mn === "sty") && (mode === "zp" || mode === "abs")) {
+      const a = mode === "zp" ? S.rom[it.off + 1] : S.rom[it.off + 1] | S.rom[it.off + 2] << 8;
+      const reg = regName(a, true), src = recent[mn[2]];
+      if (!reg || reg === "WSYNC" || reg === "HMOVE" || reg === "VSYNC" || reg === "VBLANK") continue;
+      for (const s of src) {
+        if (s.imm !== undefined && COLOR_REGS.has(reg) && !colors.has(s.imm)) colors.set(s.imm, { off: s.imm, reg });
+        if (s.table !== undefined) {
+          if (COLOR_REGS.has(reg)) addTable(s.table, "Colors", s.at);
+          else if (GFX_REGS.has(reg)) addTable(s.table, "Sprite", s.at);
+          else if (PF_REGS.has(reg)) addTable(s.table, "Playfield", s.at);
+        }
+      }
+      recent[mn[2]] = [];
+    }
+  }
+  const list = [...tables.values()].sort((p, q) => p.off - q.off);
+  list.forEach((t, i) => {
+    const b = bankOf(t.off);
+    const stop = i + 1 < list.length ? Math.min(list[i + 1].off, b.end) : b.end;
+    t.len = 0;
+    for (let k = t.off; k < stop && k - t.off < 64 && mark[k] === 0; k++) t.len++;
+  });
+  const order = { Sprite: 0, Playfield: 1, Colors: 2, Data: 3 };
+  list.sort((p, q) => order[p.kind] - order[q.kind] || p.off - q.off);
+  return { colors: [...colors.values()].sort((p, q) => p.off - q.off), tables: list };
+}
+let disTimer = 0;
+function queueDis() { clearTimeout(disTimer); disTimer = setTimeout(() => { runDis(); draw(); }, 200); }
+function runDis() { disassemble(); }
+
+/* ---------- Code view ---------- */
+const CODE_H = 20, codeScroll = $("codeScroll"), codeWin = $("codeWin");
+let codeKey = "";
+function itemIndex(off) {
+  const a = S.dis.items; let lo = 0, hi = a.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (a[m].off <= off) lo = m; else hi = m - 1; }
+  return lo;
+}
+function revealCode() { const y = itemIndex(S.sel) * CODE_H, h = codeScroll.clientHeight; if (y < codeScroll.scrollTop || y + CODE_H > codeScroll.scrollTop + h) codeScroll.scrollTop = y - h / 2; }
+function changedIn(o, len) { for (let i = 0; i < len; i++) if (S.rom[o + i] !== S.orig[o + i]) return true; return false; }
+function renderCode() {
+  const { items, codeBytes, colors, tables } = S.dis;
+  $("codeSpacer").style.height = items.length * CODE_H + "px";
+  const first = Math.max(0, Math.floor(codeScroll.scrollTop / CODE_H) - 2), count = Math.ceil(codeScroll.clientHeight / CODE_H) + 5;
+  codeWin.style.top = first * CODE_H + "px";
+  const f = document.createDocumentFragment();
+  for (let i = first; i < Math.min(items.length, first + count); i++) {
+    const it = items[i], row = document.createElement("div");
+    row.className = "crow" + (it.code ? "" : " data") + (S.sel >= it.off && S.sel < it.off + it.len ? " on" : "") + (changedIn(it.off, it.len) ? " chg" : "");
+    row.dataset.o = it.off;
+    const addr = document.createElement("span"); addr.className = "ca"; addr.textContent = (it.label ? "▸" : " ") + "$" + hex4(it.addr);
+    const by = document.createElement("span"); by.className = "cb";
+    const bytes = Array.from(S.rom.subarray(it.off, it.off + it.len), hex2);
+    by.textContent = it.code ? bytes.join(" ") : "";
+    row.append(addr, by);
+    const ins = document.createElement("span"); ins.className = "ci";
+    if (it.code) {
+      ins.textContent = it.op.mn.toUpperCase() + (it.op.illegal ? "*" : "") + " ";
+      if (it.target !== null) {
+        const t = document.createElement("button"); t.dataset.go = it.target; t.textContent = it.arg; ins.append(t);
+      } else ins.append(it.arg);
+    } else ins.textContent = ".byte " + bytes.join(" ");
+    row.append(ins); f.append(row);
+  }
+  codeWin.replaceChildren(f);
+  const pct = Math.round(codeBytes / S.rom.length * 100);
+  $("codeSummary").textContent = codeBytes.toLocaleString() + " bytes of code traced (" + pct + "%). The rest is shown as data.";
+  const key = colors.map(c => c.off + ":" + S.rom[c.off]).join() + "|" + tables.map(t => t.off + t.kind + t.len).join();
+  if (key === codeKey) return; codeKey = key;
+  const cl = $("colorList"), cf = document.createDocumentFragment();
+  colors.forEach(c => {
+    const v = S.rom[c.off], b = document.createElement("button"), chip = document.createElement("span");
+    chip.className = "colorchip"; chip.style.background = tiaColor(v); b.dataset.pick = c.off;
+    b.append(chip, " $" + hex2(v & 0xFE) + " " + c.reg + " at $" + hex4(c.off)); cf.append(b);
+  });
+  cl.replaceChildren(cf); $("colorEmpty").hidden = colors.length > 0;
+  const tl = $("tableList"), tf = document.createDocumentFragment();
+  tables.forEach(t => {
+    const b = document.createElement("button"); b.dataset.table = t.off;
+    b.textContent = t.kind + " at $" + hex4(t.off) + (t.len > 1 ? ", up to " + t.len + " bytes" : ""); tf.append(b);
+  });
+  tl.replaceChildren(tf); $("tableEmpty").hidden = tables.length > 0;
+}
+codeScroll.addEventListener("scroll", draw, { passive: true });
+codeWin.addEventListener("click", e => {
+  const go = e.target.dataset.go;
+  if (go !== undefined) return select(+go);
+  const row = e.target.closest(".crow"); if (row) select(+row.dataset.o);
+});
+$("colorList").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { select(+b.dataset.pick); byteInput.focus(); } });
+$("tableList").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { setView("grid"); select(+b.dataset.table); } });
+$("traceBtn").onclick = () => {
+  S.entries.add(S.sel); runDis(); setView("code"); select(S.sel);
+  say(S.dis.mark[S.sel] === 1 ? "Added $" + hex4(S.sel) + " as a code entry point" : "The byte at $" + hex4(S.sel) + " can't start an instruction here", S.dis.mark[S.sel] !== 1);
+};
+function buildSource() {
+  const L = ["; Disassembled by Cartbench from " + S.name, "; Assemble with: dasm source.asm -f3 -osource.bin", "    processor 6502", ""];
+  TIA_W.forEach((n, i) => L.push(n.padEnd(8) + "= $" + hex2(i)));
+  TIA_R.forEach((n, i) => L.push(n.padEnd(8) + "= $" + hex2(i)));
+  Object.entries(RIOT).forEach(([a, n]) => L.push(n.padEnd(8) + "= $" + hex4(+a)));
+  for (const it of S.dis.items) {
+    const b = bankOf(it.off);
+    if (it.off === b.start) L.push("", "    ORG $" + hex4(S.rom.length > 4096 ? 0x1000 + it.off : b.base), "    RORG $" + hex4(b.base));
+    const raw = "    .byte " + Array.from(S.rom.subarray(it.off, it.off + it.len), v => "$" + hex2(v)).join(",");
+    if (!it.code) { L.push(raw); continue; }
+    const c = it.op.mn.toUpperCase() + (it.arg ? " " + it.arg : ""), a = "; $" + hex4(it.addr);
+    // Undocumented opcodes and absolute zero-page operands have no safe text form, so keep their bytes
+    const raw3 = it.len === 3 && S.rom[it.off + 2] === 0;
+    if (it.op.illegal || raw3) L.push(raw.padEnd(30) + a + "  " + c);
+    else L.push(("    " + c).padEnd(30) + a);
+  }
+  return L.join("\n") + "\n";
+}
+$("sourceBtn").onclick = () => saveFile(baseName() + "-source.txt", new TextEncoder().encode(buildSource()), "Source exported. Rename it to .asm to assemble it with dasm.");
+
+/* ---------- Compare ---------- */
+function diffRanges(a, b) {
+  const n = Math.min(a.length, b.length), out = []; let s = -1, last = -1;
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) {
+    if (s >= 0 && i - last > 3) { out.push([s, last]); s = i; } else if (s < 0) s = i;
+    last = i;
+  }
+  if (s >= 0) out.push([s, last]);
+  return out;
+}
+function kindAt(off) {
+  const t = S.dis.tables.find(x => off >= x.off && off < x.off + Math.max(1, x.len));
+  if (t) return t.kind;
+  return S.dis.mark[off] ? "Code" : "Data";
+}
+function bits(canvas, bytes, base, other) {
+  const px = 7, rows = bytes.length; canvas.width = 8 * px + 1; canvas.height = rows * px;
+  const c = canvas.getContext("2d");
+  c.fillStyle = "#0d0a08"; c.fillRect(0, 0, canvas.width, canvas.height);
+  bytes.forEach((v, r) => { for (let b = 0; b < 8; b++) {
+    const m = 128 >> b, diff = (v ^ other[r]) & m;
+    if (v & m) { c.fillStyle = diff ? "#ff7a59" : tiaColor(S.ink); c.fillRect(b * px, r * px, px - 1, px - 1); }
+    else if (diff) { c.fillStyle = "#5c2c20"; c.fillRect(b * px, r * px, px - 1, px - 1); }
+  } });
+}
+function renderCompare() {
+  const B = S.cmp && S.cmp.bytes, box = $("cmpList"), f = document.createDocumentFragment();
+  $("cmpEmpty").hidden = !!B; $("cmpBody").hidden = !B;
+  if (!B) return;
+  const ranges = diffRanges(S.rom, B), total = ranges.reduce((t, [a, b]) => { for (let i = a; i <= b; i++) if (S.rom[i] !== B[i]) t++; return t; }, 0);
+  const sizeNote = S.rom.length !== B.length ? " Sizes differ, so only the first " + Math.min(S.rom.length, B.length).toLocaleString() + " bytes are compared." : "";
+  $("cmpSummary").textContent = total ? total + (total === 1 ? " byte differs" : " bytes differ") + " from " + S.cmp.name + " in " + ranges.length + (ranges.length === 1 ? " place." : " places.") + sizeNote : "No differences from " + S.cmp.name + "." + sizeNote;
+  $("applyAllBtn").disabled = !total;
+  if (S.cmpSel >= ranges.length) S.cmpSel = 0;
+  ranges.slice(0, 200).forEach(([a, b], i) => {
+    const li = document.createElement("div"); li.className = "cmprow" + (i === S.cmpSel ? " on" : "");
+    const s = document.createElement("button"); s.className = "jump"; s.dataset.i = i;
+    s.textContent = "$" + hex4(a) + (b > a ? "–$" + hex4(b) : "") + "  " + kindAt(a);
+    const ap = document.createElement("button"); ap.className = "rev"; ap.dataset.a = a; ap.dataset.b = b; ap.textContent = "Apply";
+    li.append(s, ap); f.append(li);
+  });
+  box.replaceChildren(f);
+  const r = ranges[S.cmpSel]; $("cmpPreview").hidden = !r;
+  if (r) {
+    const a = Math.max(0, r[0] - 2), e = Math.min(S.rom.length, B.length, r[1] + 3), mine = [...S.rom.subarray(a, Math.min(e, a + 48))], theirs = [...B.subarray(a, Math.min(e, a + 48))];
+    bits($("cmpA"), mine, a, theirs); bits($("cmpB"), theirs, a, mine);
+    $("cmpBLabel").textContent = S.cmp.name; 
+  }
+}
+$("cmpList").addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.i !== undefined) { S.cmpSel = +t.dataset.i; const r = diffRanges(S.rom, S.cmp.bytes)[S.cmpSel]; select(r[0]); }
+  if (t.dataset.a !== undefined) { for (let i = +t.dataset.a; i <= +t.dataset.b; i++) setByte(i, S.cmp.bytes[i]); S.syncInput = true; commit(); say("Applied those bytes to your ROM"); }
+});
+$("applyAllBtn").onclick = () => {
+  const B = S.cmp.bytes, n = Math.min(S.rom.length, B.length);
+  for (let i = 0; i < n; i++) if (S.rom[i] !== B[i]) setByte(i, B[i]);
+  S.syncInput = true; commit(); say("Applied every difference. Undo reverses this in one step.");
+};
+$("cmpOpenBtn").onclick = () => $("cmpInput").click();
+$("cmpEmptyBtn").onclick = () => $("cmpInput").click();
+$("cmpInput").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer()), err = validate(bytes);
+    if (err) return say(err, true);
+    S.cmp = { name: f.name, bytes }; S.cmpSel = 0; setView("compare"); say("Comparing with " + f.name);
+  } catch (x) { say("That file could not be read. Try choosing it again.", true); }
+};
+
+/* ---------- Views ---------- */
+function setView(v) {
+  S.view = v;
+  $("gridView").hidden = v !== "grid"; $("codeView").hidden = v !== "code"; $("compareView").hidden = v !== "compare";
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.view === v));
+  renderAll();                    // sizes exist only once the view is shown
+  if (v === "grid") ensureVisible();
+  if (v === "code") revealCode();
+  draw();
+}
+document.querySelectorAll(".tab").forEach(t => { t.onclick = () => setView(t.dataset.view); });
+
 /* ---------- Emulator ---------- */
 let emu = null, runTimer = 0, running = false;
 const emuError = msg => { const m = $("screenMsg"); m.textContent = msg; m.hidden = false; };
 function initEmu() {
   const SE = window.$6502 && window.$6502.Stellerator;
-  if (!SE) return emuError("The emulator didn't load. Reload the page to try again. Editing and export still work.");
+  if (!SE) { $("emuPanel").hidden = true; $("emuCredit").hidden = true; return; }     // the published page ships without the emulator
   try {
     emu = new SE($("screen"), "worker/stellerator.js", {
       tvEmulation: SE.TvEmulation.none, phosphorLevel: 0, scanlineLevel: 0, scalingMode: SE.ScalingMode.qis,
@@ -663,7 +1088,8 @@ async function runRom() {
   } catch (e) { emuError("This ROM couldn't be started. Its format may not be supported."); }
 }
 function romEdited() {
-  if (!$("autoRun").checked) return;
+  queueDis();
+  if (!emu || !$("autoRun").checked) return;
   clearTimeout(runTimer); runTimer = setTimeout(runRom, 350);
 }
 $("restartBtn").onclick = () => { $("screenMsg").hidden = true; runRom(); };
@@ -681,7 +1107,7 @@ $("screenWrap").addEventListener("keydown", e => { if (e.key.startsWith("Arrow")
 setInk(S.ink);
 initEmu();
 open("Sample cart", sampleRom(), true);
-say("Sample running. Change a pixel of the invader at $0300 and watch the screen.");
+say(emu ? "Sample running. Change a pixel of the invader at $0300 and watch the screen." : "Sample loaded. Click a pixel to change it, or open your own ROM.");
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
 </script>
 </body></html>
