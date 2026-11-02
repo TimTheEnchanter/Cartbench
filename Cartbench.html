@@ -245,6 +245,8 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
     </div>
     <label class="tool" for="autoRun"><input id="autoRun" type="checkbox" checked> Restart game after each edit</label>
     <p class="hint">Click the screen to play: arrow keys and Space.</p>
+    <p class="hint" id="liveInfo">Recording starts when the game runs. Play more of the game to find more.</p>
+    <button class="btn tiny" id="liveClear" style="align-self:flex-start">Clear recording</button>
     </div>
     <h2>Cart map</h2>
     <canvas id="map" aria-label="Overview of the whole ROM. Click to jump."></canvas>
@@ -342,7 +344,7 @@ const GUTTER = 66, GAP = 8, HEXCOL = 34;
 
 const S = { name: "", orig: new Uint8Array(0), rom: new Uint8Array(0), sample: false, sel: 0,
   bpr: 1, px: 16, flip: false, ink: 0x1E, undo: [], redo: [], tx: null, paint: 0, last: null,
-  view: "grid", entries: new Set(), dis: null, cmp: null, cmpSel: 0 };
+  view: "grid", entries: new Set(), dis: null, cmp: null, cmpSel: 0, live: null, liveBad: 0, liveTot: 0 };
 
 /* ---------- Built-in sample: a tiny original program. Joystick moves the invader. ---------- */
 const SAMPLE_CODE = "78d8a2ff9aa9009500cad0fba94c8581a9328580a90285018500850285028502a9008500a92b8d9602ada0f38509ada2f38506ada3f38507ad80020ab002e6800ab002c6800ab002e6810ab002c681a580c9c89004a9008580c9989004a9978580a580a20020c0f0a96ea20120c0f08502852aad8402d0fb85028501a2008a38e581c910b0094aa8b900f39004b002a9008502851b8a38e958c910b0094aa8b910f39004b002a900851ce8e0c0d0cfa9028501a9238d9602ad8402d0fb4c14f0850238e90fb0fc49070a0a0a0a9520951060";
@@ -431,7 +433,7 @@ function describeSize(n) {
   return n.toLocaleString() + " bytes, unusual size";
 }
 function open(name, bytes, sample) {
-  Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null, entries: new Set(), cmpSel: 0 });
+  Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null, entries: new Set(), cmpSel: 0, live: new Uint8Array(bytes.length), liveBad: 0, liveTot: 0 });
   S.cmp = sample ? { name: "Sample hack", bytes: sampleHack(bytes) } : null;
   runDis();
   renderInfo(); layout(); scroller.scrollTop = 0;
@@ -798,6 +800,7 @@ function trace() {
     for (const v of [b.end - 4, b.end - 2]) if (v >= b.start) push(toOffset(r[v] | r[v + 1] << 8, b), fresh());
   }
   for (const e of S.entries) if (e < n) push(e, fresh());
+  if (S.live) for (let i = n - 1; i >= 0; i--) if (S.live[i] & 1) stack.push({ o: i, st: fresh() });     // instructions seen running
   // Rejects guessed targets that run into undocumented opcodes, which usually means data
   const plausible = t => {
     const todo = [t], walked = new Set();
@@ -822,6 +825,7 @@ function trace() {
     }
     return first >= 2;     // a bare RTS or JMP is more likely stray data
   };
+  const known = o => S.live && (S.live[o] & 3) === 2;      // read as data and never run while playing
   const visits = new Uint8Array(n);   // keeps the path count bounded on large games
   let steps = 0;
   const run = () => {
@@ -830,12 +834,12 @@ function trace() {
       for (;;) {
         if (o >= n || ++steps >= 400000) break;
         const key = o + ":" + ptrList.map(p => st.z[p] ?? "").join() + ":" + st.s.join();
-        if (seen.has(key) || mark[o] === 2 || visits[o] >= 12) break;
+        if (seen.has(key) || mark[o] === 2 || visits[o] >= 12 || known(o)) break;
         seen.add(key); visits[o]++;
         const b = bankOf(o), op = OPTABLE[r[o]], { mn, mode, len } = op;
         if (mn === "kil" || o + len > b.end) break;
         let clash = false;
-        for (let i = 1; i < len; i++) if (mark[o + i] === 1) clash = true;
+        for (let i = 1; i < len; i++) if (mark[o + i] === 1 || known(o + i)) clash = true;
         if (clash) break;
         mark[o] = 1; for (let i = 1; i < len; i++) mark[o + i] = 2;
         const v1 = r[o + 1], v2 = v1 | r[o + 2] << 8, addr = b.base + (o - b.start);
@@ -990,6 +994,19 @@ function scanFinds(items, mark, W) {
     t.len = 0;
     for (let k = t.off; k < stop && k - t.off < 64 && mark[k] === 0; k++) t.len++;
   });
+  // Bytes actually sent to the display while playing outrank anything inferred
+  const seen = [];
+  if (S.live) for (const [flag, kind] of [[4, "Sprite"], [8, "Playfield"], [16, "Colors"]]) {
+    let s = -1, e = -1;
+    const flush = () => { if (s >= 0 && (kind === "Colors" || (e - s >= 2 && S.rom.subarray(s, e + 1).some(v => v)))) seen.push({ off: s, len: e - s + 1, kind, seen: true }); s = -1; };
+    for (let i = 0; i < n; i++) {
+      if (!(S.live[i] & flag) || (S.live[i] & 32) || mark[i] !== 0) continue;
+      if (s >= 0 && (i - e > 3 || bankOf(i).start !== bankOf(s).start)) flush();
+      if (s < 0) s = i;
+      e = i;
+    }
+    flush();
+  }
   // Tidies pointers into the same data: joins neighbors and folds in tiny fragments
   for (let i = list.length - 1; i > 0; i--) {
     const p = list[i - 1], t = list[i], gap = t.off - (p.off + p.len);
@@ -1000,9 +1017,11 @@ function scanFinds(items, mark, W) {
     if (p.kind === t.kind || t.kind === "Data" || t.len < 3) { p.len = t.off + t.len - p.off; list.splice(i, 1); }
     else if (p.kind === "Data" && p.len < 3) list.splice(i - 1, 1);
   }
+  const kept = list.filter(t => !seen.some(v => t.off < v.off + v.len && v.off < t.off + t.len)).concat(seen);
   const order = { Sprite: 0, Playfield: 1, Colors: 2, Data: 3 };
-  list.sort((p, q) => order[p.kind] - order[q.kind] || p.off - q.off);
-  return { colors: [...colors.values()].sort((p, q) => p.off - q.off), tables: list };
+  kept.sort((p, q) => order[p.kind] - order[q.kind] || (q.seen ? 1 : 0) - (p.seen ? 1 : 0) || p.off - q.off);
+  if (S.live) for (let i = 0; i < n; i++) if ((S.live[i] & 32) && !colors.has(i)) colors.set(i, { off: i, reg: "Color" });
+  return { colors: [...colors.values()].sort((p, q) => p.off - q.off), tables: kept };
 }
 let disTimer = 0;
 function queueDis() { clearTimeout(disTimer); disTimer = setTimeout(() => { runDis(); draw(); }, 200); }
@@ -1044,15 +1063,15 @@ function renderCode() {
   }
   codeWin.replaceChildren(f);
   const pct = Math.round(codeBytes / S.rom.length * 100);
-  $("codeSummary").textContent = codeBytes.toLocaleString() + " bytes of code traced (" + pct + "%). The rest is shown as data.";
+  $("codeSummary").textContent = codeBytes.toLocaleString() + " bytes of code traced (" + pct + "%). The rest is shown as data." + (S.liveRan ? " " + S.liveRan.toLocaleString() + " instructions were seen running." : "");
   const sum = t => { let v = 0; for (let i = 0; i < Math.min(t.len, 48); i++) v = (v * 31 + S.rom[t.off + i]) | 0; return v; };
-  const key = S.ink + "|" + colors.map(c => c.off + ":" + S.rom[c.off]).join() + "|" + tables.map(t => t.off + t.kind + t.len + ":" + sum(t)).join();
+  const key = S.ink + "|" + (S.live ? S.liveSeen : 0) + "|" + colors.map(c => c.off + ":" + S.rom[c.off]).join() + "|" + tables.map(t => t.off + t.kind + t.len + ":" + sum(t)).join();
   if (key === codeKey) return; codeKey = key;
   const cf = document.createDocumentFragment();
   colors.forEach(c => {
     const v = S.rom[c.off], b = document.createElement("button"), chip = document.createElement("span");
     chip.className = "colorchip"; chip.style.background = tiaColor(v); b.dataset.pick = c.off;
-    b.append(chip, " $" + hex2(v & 0xFE) + " " + c.reg + " at $" + hex4(c.off)); cf.append(b);
+    b.append(chip, " $" + hex2(v & 0xFE) + " " + c.reg + " at $" + hex4(c.off) + (S.live && S.live[c.off] & 32 ? ", seen" : "")); cf.append(b);
   });
   $("colorList").replaceChildren(cf); $("numColors").textContent = "(" + colors.length + ")"; $("grpColors").hidden = !colors.length;
   const multi = S.rom.length > 4096;
@@ -1061,7 +1080,7 @@ function renderCode() {
     rows.forEach(t => {
       const b = document.createElement("button"), txt = document.createElement("span"), name = document.createElement("b"), sm = document.createElement("small");
       b.className = "trow"; b.dataset.table = t.off; name.textContent = "$" + hex4(t.off);
-      sm.textContent = (t.len > 1 ? "up to " + t.len + " bytes" : "1 byte") + (multi ? ", bank " + Math.floor(t.off / 4096) : "");
+      sm.textContent = t.seen ? "Seen on screen, " + t.len + (t.len === 1 ? " byte" : " bytes") + (multi ? ", bank " + Math.floor(t.off / 4096) : "") : (t.len > 1 ? "up to " + t.len + " bytes" : "1 byte") + (multi ? ", bank " + Math.floor(t.off / 4096) : "");
       txt.append(name, sm); b.append(txt);
       if (kind !== "Data") b.append(thumb(t));
       f.append(b);
@@ -1199,16 +1218,46 @@ function setView(v) {
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => setView(t.dataset.view); });
 
 /* ---------- Emulator ---------- */
-let emu = null, runTimer = 0, running = false;
+let emu = null, runTimer = 0, running = false, emuWorker = null, liveTimer = 0, baseLive = null, liveGen = 0, runId = 0;
+function configRecorder() {
+  if (!emuWorker) return;
+  const n = S.rom.length, h = hotspots(n);
+  baseLive = S.live.slice(); S.liveBad = 0; S.liveTot = 0;
+  liveGen++;
+  emuWorker.postMessage({ cbConfig: { gen: liveGen, rom: S.rom.slice(), first: h ? h.first : -1, count: h ? h.count : 0, start: n === 8192 ? 1 : 0 } });
+}
+function takeCoverage(m) {
+  if (m.gen !== liveGen || m.cbCov.length !== S.rom.length) return;   // late data from an earlier run
+  let changed = false;
+  for (let i = 0; i < m.cbCov.length; i++) { const v = baseLive[i] | m.cbCov[i]; if (v !== S.live[i]) { S.live[i] = v; changed = true; } }
+  S.liveBad = m.bad; S.liveTot = m.tot;
+  renderLive();
+  if (changed && !liveTimer) liveTimer = setTimeout(() => { liveTimer = 0; runDis(); draw(); }, 2500);
+}
+function renderLive() {
+  let ran = 0, spr = 0, pf = 0, col = 0;
+  for (const v of S.live) { if (v & 1) ran++; if (v & 4) spr++; if (v & 8) pf++; if (v & 16) col++; }
+  S.liveRan = ran; S.liveSeen = spr + pf + col;
+  const el = $("liveInfo");
+  if (S.liveTot > 2000 && S.liveBad / S.liveTot > 0.01) el.textContent = "This game's bank switching isn't one the recorder understands, so don't trust these results.";
+  else el.textContent = "Recorded: " + ran.toLocaleString() + " instructions, " + spr.toLocaleString() + " sprite, " + pf.toLocaleString() + " playfield and " + col.toLocaleString() + " color bytes. Play more of the game to find more.";
+}
 const emuError = msg => { const m = $("screenMsg"); m.textContent = msg; m.hidden = false; };
 function initEmu() {
   const SE = window.$6502 && window.$6502.Stellerator;
   if (!SE) { $("emuPanel").hidden = true; $("emuCredit").hidden = true; return; }     // the published page ships without the emulator
   try {
+    const NativeWorker = window.Worker;       // the recorder talks to the emulator's worker directly
+    window.Worker = function (url) {
+      const w = new NativeWorker(url);
+      w.addEventListener("message", e => { if (e.data && e.data.cbCov) { e.stopImmediatePropagation(); takeCoverage(e.data); } });
+      emuWorker = w; return w;
+    };
     emu = new SE($("screen"), "worker/stellerator.js", {
       tvEmulation: SE.TvEmulation.none, phosphorLevel: 0, scanlineLevel: 0, scalingMode: SE.ScalingMode.qis,
       volume: 0.3, keyboardTarget: $("screenWrap"), fullscreenViaKeyboard: false, pauseViaKeyboard: false, pauseViaTouch: false, fullscreenViaTouch: false
     });
+    window.Worker = NativeWorker;
     emu.frequencyUpdate.addHandler(f => { $("speed").textContent = (f / 1e6).toFixed(2) + " MHz"; });
     emu.stateChange.addHandler(onEmuState);
     addEventListener("resize", () => { if (emu && !emu.isFullscreen()) emu.resize(); });
@@ -1228,6 +1277,11 @@ async function runRom() {
   clearTimeout(runTimer);
   try {
     const SE = window.$6502.Stellerator, tv = $("tvMode").value === "pal" ? SE.TvMode.pal : SE.TvMode.ntsc;
+    const id = ++runId;
+    liveGen++;                                 // ignore anything still arriving from the old game
+    await emu.stop();                          // the old game must not run into the new recording
+    if (id !== runId) return;
+    configRecorder();
     await emu.run(Array.from(S.rom), tv);
     onEmuState(emu.getState());
   } catch (e) { emuError("This ROM couldn't be started. Its format may not be supported."); }
@@ -1237,6 +1291,7 @@ function romEdited() {
   if (!emu || !$("autoRun").checked) return;
   clearTimeout(runTimer); runTimer = setTimeout(runRom, 350);
 }
+$("liveClear").onclick = () => { S.live.fill(0); baseLive = S.live.slice(); renderLive(); runRom(); runDis(); draw(); say("Recording cleared"); };
 $("restartBtn").onclick = () => { $("screenMsg").hidden = true; runRom(); };
 $("pauseBtn").onclick = () => { if (emu) running ? emu.pause().then(onEmuState) : emu.resume().then(onEmuState); };
 $("tvMode").onchange = runRom;

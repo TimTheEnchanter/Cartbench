@@ -1217,15 +1217,16 @@ function setView(v) {
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => setView(t.dataset.view); });
 
 /* ---------- Emulator ---------- */
-let emu = null, runTimer = 0, running = false, emuWorker = null, liveTimer = 0, baseLive = null;
+let emu = null, runTimer = 0, running = false, emuWorker = null, liveTimer = 0, baseLive = null, liveGen = 0, runId = 0;
 function configRecorder() {
   if (!emuWorker) return;
   const n = S.rom.length, h = hotspots(n);
   baseLive = S.live.slice(); S.liveBad = 0; S.liveTot = 0;
-  emuWorker.postMessage({ cbConfig: { rom: S.rom.slice(), first: h ? h.first : -1, count: h ? h.count : 0, start: n === 8192 ? 1 : 0 } });
+  liveGen++;
+  emuWorker.postMessage({ cbConfig: { gen: liveGen, rom: S.rom.slice(), first: h ? h.first : -1, count: h ? h.count : 0, start: n === 8192 ? 1 : 0 } });
 }
 function takeCoverage(m) {
-  if (m.cbCov.length !== S.rom.length) return;
+  if (m.gen !== liveGen || m.cbCov.length !== S.rom.length) return;   // late data from an earlier run
   let changed = false;
   for (let i = 0; i < m.cbCov.length; i++) { const v = baseLive[i] | m.cbCov[i]; if (v !== S.live[i]) { S.live[i] = v; changed = true; } }
   S.liveBad = m.bad; S.liveTot = m.tot;
@@ -1275,6 +1276,10 @@ async function runRom() {
   clearTimeout(runTimer);
   try {
     const SE = window.$6502.Stellerator, tv = $("tvMode").value === "pal" ? SE.TvMode.pal : SE.TvMode.ntsc;
+    const id = ++runId;
+    liveGen++;                                 // ignore anything still arriving from the old game
+    await emu.stop();                          // the old game must not run into the new recording
+    if (id !== runId) return;
     configRecorder();
     await emu.run(Array.from(S.rom), tv);
     onEmuState(emu.getState());
