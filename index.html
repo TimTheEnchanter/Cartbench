@@ -1,5 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Cartbench</title>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body><title>Cartbench</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Michroma&display=swap">
@@ -83,16 +82,24 @@ button, select, input { font: inherit; color: inherit; }
 
 main {
   min-height: 0; display: grid; gap: 14px;
-  grid-template-columns: 160px minmax(0, 1fr) 320px;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
   padding-block: 12px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .col { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.mapcol { overflow-y: auto; }
 h2 { font: 400 10.5px/1.3 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .hint { font-size: 13px; color: var(--muted); margin: 0; }
 
-#map { width: 100%; image-rendering: pixelated; background: var(--pixel-off); border: 1px solid var(--line); cursor: pointer; display: block; }
+#screenWrap { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; outline: 1px solid var(--line); flex: none; }
+#screenWrap:focus { outline: 2px solid var(--amber); }
+#screen { display: block; width: 100%; height: 100%; }
+#screenMsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; font-size: 14px; background: #000; }
+.emu-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.emu-row .tool input[type=range] { width: 70px; }
+#speed { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+#map { flex: none; width: 100%; image-rendering: pixelated; background: var(--pixel-off); border: 1px solid var(--line); cursor: pointer; display: block; }
 
 #scroller { flex: 1; min-height: 0; overflow: auto; background: var(--pixel-off); border: 1px solid var(--line); }
 #spacer { position: relative; min-height: 100%; }
@@ -135,6 +142,10 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
 
 .drop { position: fixed; inset: 0; z-index: 50; background: #000c; display: grid; place-items: center; font: 400 20px var(--display); pointer-events: none; }
 
+@media (max-width: 1200px) and (min-width: 961px) {
+  main { grid-template-columns: 250px minmax(0, 1fr) 280px; }
+  .hrow button { width: 22px; }
+}
 @media (max-width: 960px) {
   html, body { height: auto; }
   body { display: block; }
@@ -173,9 +184,24 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
 
 <main>
   <section class="col mapcol">
+    <h2>Screen</h2>
+    <div id="screenWrap" tabindex="0" aria-label="Game screen. Focus here to play with the keyboard."><canvas id="screen"></canvas><div id="screenMsg">Starting the emulator…</div></div>
+    <div class="emu-row">
+      <button class="btn tiny" id="restartBtn">Restart</button>
+      <button class="btn tiny" id="pauseBtn">Pause</button>
+      <button class="btn tiny" id="selectSw">Game Select</button>
+      <button class="btn tiny" id="resetSw">Game Reset</button>
+    </div>
+    <div class="emu-row">
+      <label class="tool" for="tvMode">TV <select id="tvMode"><option value="ntsc">NTSC</option><option value="pal">PAL</option></select></label>
+      <label class="tool" for="vol">Sound <input id="vol" type="range" min="0" max="100" value="30"></label>
+      <span id="speed"></span>
+    </div>
+    <label class="tool" for="autoRun"><input id="autoRun" type="checkbox" checked> Restart game after each edit</label>
+    <p class="hint">Click the screen to play: arrow keys and Space.</p>
     <h2>Cart map</h2>
     <canvas id="map" aria-label="Overview of the whole ROM. Click to jump."></canvas>
-    <p class="hint">Every byte in the cart. Sprites show up as tidy shapes among the noisy code. Click to jump.</p>
+    <p class="hint">Every byte in the cart. Sprites look like tidy shapes among noisy code. Click to jump.</p>
   </section>
 
   <section class="col">
@@ -207,10 +233,11 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
 
 <footer class="foot">
   <span id="status" role="status">Ready</span>
-  <span>Your ROM stays in this browser and is never uploaded.</span>
+  <span>Your ROM stays in this browser and is never uploaded. Emulation by <a href="https://github.com/6502ts/6502.ts" style="color:inherit">Stellerator</a>, MIT license.</span>
 </footer>
 <div class="drop" id="drop" hidden>Drop ROM to open</div>
 
+<script src="stellerator-embedded.js"></script>
 <script>
 "use strict";
 /* NTSC TIA palette: 16 hues, 8 luminance steps. */
@@ -232,11 +259,13 @@ const GUTTER = 66, GAP = 8, HEXCOL = 34;
 const S = { name: "", orig: new Uint8Array(0), rom: new Uint8Array(0), sample: false, sel: 0,
   bpr: 1, px: 16, flip: false, ink: 0x1E, undo: [], redo: [], tx: null, paint: 0, last: null };
 
-/* ---------- Built-in sample: original sprites, not a playable game ---------- */
+/* ---------- Built-in sample: a tiny original program. Joystick moves the invader. ---------- */
+const SAMPLE_CODE = "78d8a2ff9aa9009500cad0fba94c8581a9328580a90285018500850285028502a9008500a92b8d9602ada0f38509ada2f38506ada3f38507ad80020ab002e6800ab002c6800ab002e6810ab002c681a580c9c89004a9008580c9989004a9978580a580a20020c0f0a96ea20120c0f08502852aad8402d0fb85028501a2008a38e581c910b0094aa8b900f39004b002a9008502851b8a38e958c910b0094aa8b910f39004b002a900851ce8e0c0d0cfa9028501a9238d9602ad8402d0fb4c14f0850238e90fb0fc49070a0a0a0a9520951060";
 function sampleRom() {
   const r = new Uint8Array(4096);
   let x = 0x5A;
-  for (let i = 0; i < 0x300; i++) { x = (x * 13 + 41) & 255; r[i] = x; }     // stands in for code
+  for (let i = 0; i < 0x300; i++) { x = (x * 13 + 41) & 255; r[i] = x; }     // unused filler
+  for (let i = 0; i < SAMPLE_CODE.length / 2; i++) r[i] = parseInt(SAMPLE_CODE.substr(i * 2, 2), 16);
   const put = (o, rows) => { rows.forEach((s, i) => { r[o + i] = parseInt(s.replace(/\./g, "0").replace(/#/g, "1"), 2); }); };
   put(0x300, ["...##...","..####..",".######.","##.##.##","########","..#..#..",".#.##.#.","#.#..#.#"]);           // invader
   put(0x310, ["...##...","...##...","..####..","..#..#..",".######.","########","##.##.##","#..##..#"]);           // rocket
@@ -279,7 +308,7 @@ function commit() {
   if (!S.tx) return;
   const list = [...S.tx].filter(([o, b]) => S.rom[o] !== b).map(([o, b]) => [o, b, S.rom[o]]);
   S.tx = null;
-  if (list.length) { S.undo.push(list); S.redo = []; }
+  if (list.length) { S.undo.push(list); S.redo = []; romEdited(); }
   draw();
 }
 function step(from, to, idx, word) {
@@ -287,7 +316,7 @@ function step(from, to, idx, word) {
   if (!t) return;
   t.forEach(e => { S.rom[e[0]] = e[idx]; });
   to.push(t);
-  S.sel = t[0][0]; ensureVisible(); say(word); draw();
+  S.sel = t[0][0]; ensureVisible(); say(word); romEdited(); draw();
 }
 const undo = () => step(S.undo, S.redo, 1, "Undid the last edit");
 const redo = () => step(S.redo, S.undo, 2, "Redid the edit");
@@ -313,6 +342,7 @@ function open(name, bytes, sample) {
   Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null });
   renderInfo(); layout(); scroller.scrollTop = 0;
   if (sample) { S.sel = 0x300; S.flip = false; $("flip").checked = false; layout(); scroller.scrollTop = 0x2F8 * S.px; }
+  runRom();
   draw();
 }
 function validate(bytes) {
@@ -333,7 +363,7 @@ async function loadFile(f) {
 function renderInfo() {
   const el = $("fileInfo"); el.textContent = "";
   const b = document.createElement("b"); b.textContent = S.name; el.append(b, " · " + describeSize(S.rom.length) + " ");
-  if (S.sample) { const t = document.createElement("span"); t.className = "sample"; t.textContent = "Sample data, not a playable game"; el.append(t); }
+  if (S.sample) { const t = document.createElement("span"); t.className = "sample"; t.textContent = "Sample cart, made for Cartbench"; el.append(t); }
 }
 
 /* ---------- Export: .bin is not an allowed save type here, so the ROM ships in a zip ---------- */
@@ -422,7 +452,7 @@ function renderGrid() {
   }
 }
 function renderMap() {
-  const n = S.rom.length, cols = 16, colBytes = Math.ceil(n / cols), w = cols * 8, h = colBytes;
+  const n = S.rom.length, cols = 32, colBytes = Math.ceil(n / cols), w = cols * 8, h = colBytes;
   if (mapEl.width !== w || mapEl.height !== h) { mapEl.width = w; mapEl.height = h; }
   const c = mapEl.getContext("2d"), img = c.createImageData(w, h), D = img.data;
   const inkHex = tiaColor(S.ink), ir = parseInt(inkHex.slice(1, 3), 16), ig = parseInt(inkHex.slice(3, 5), 16), ib = parseInt(inkHex.slice(5, 7), 16);
@@ -567,7 +597,7 @@ $("changes").addEventListener("click", e => {
 });
 $("map").addEventListener("click", e => {
   const b = mapEl.getBoundingClientRect(), colBytes = mapEl.height;
-  const col = Math.min(15, Math.floor((e.clientX - b.left) / b.width * 16));
+  const col = Math.min(31, Math.floor((e.clientX - b.left) / b.width * 32));
   const y = Math.floor((e.clientY - b.top) / b.height * colBytes);
   select(Math.min(S.rom.length - 1, col * colBytes + y));
 });
@@ -598,10 +628,60 @@ addEventListener("drop", e => {
   const f = e.dataTransfer.files[0]; if (f) loadFile(f);
 });
 
+/* ---------- Emulator ---------- */
+let emu = null, runTimer = 0, running = false;
+const emuError = msg => { const m = $("screenMsg"); m.textContent = msg; m.hidden = false; };
+function initEmu() {
+  const SE = window.$6502 && window.$6502.Stellerator;
+  if (!SE) return emuError("The emulator didn't load. Reload the page to try again. Editing and export still work.");
+  try {
+    emu = new SE($("screen"), "worker/stellerator.js", {
+      tvEmulation: SE.TvEmulation.none, phosphorLevel: 0, scanlineLevel: 0, scalingMode: SE.ScalingMode.qis,
+      volume: 0.3, keyboardTarget: $("screenWrap"), fullscreenViaKeyboard: false, pauseViaKeyboard: false, pauseViaTouch: false, fullscreenViaTouch: false
+    });
+    emu.frequencyUpdate.addHandler(f => { $("speed").textContent = (f / 1e6).toFixed(2) + " MHz"; });
+    emu.stateChange.addHandler(onEmuState);
+    addEventListener("resize", () => { if (emu && !emu.isFullscreen()) emu.resize(); });
+  } catch (e) { emu = null; emuError("This browser couldn't start the emulator. Editing and export still work."); }
+}
+function onEmuState(st) {
+  const SE = window.$6502.Stellerator;
+  running = st === SE.State.running;
+  $("pauseBtn").textContent = st === SE.State.paused ? "Resume" : "Pause";
+  if (st === SE.State.error) {
+    $("speed").textContent = "";
+    emuError("This ROM stopped the emulator. If you edited code bytes, undo that change, then press Restart.");
+  } else if (running) $("screenMsg").hidden = true;
+}
+async function runRom() {
+  if (!emu) return;
+  clearTimeout(runTimer);
+  try {
+    const SE = window.$6502.Stellerator, tv = $("tvMode").value === "pal" ? SE.TvMode.pal : SE.TvMode.ntsc;
+    await emu.run(Array.from(S.rom), tv);
+    onEmuState(emu.getState());
+  } catch (e) { emuError("This ROM couldn't be started. Its format may not be supported."); }
+}
+function romEdited() {
+  if (!$("autoRun").checked) return;
+  clearTimeout(runTimer); runTimer = setTimeout(runRom, 350);
+}
+$("restartBtn").onclick = () => { $("screenMsg").hidden = true; runRom(); };
+$("pauseBtn").onclick = () => { if (emu) running ? emu.pause().then(onEmuState) : emu.resume().then(onEmuState); };
+$("tvMode").onchange = runRom;
+$("vol").oninput = e => { if (emu) emu.setVolume(e.target.value / 100); };
+$("screenWrap").addEventListener("pointerdown", () => $("screenWrap").focus());
+$("screenWrap").addEventListener("keydown", e => { if (e.key.startsWith("Arrow") || e.key === " ") e.preventDefault(); });
+[["selectSw", "select"], ["resetSw", "reset"]].forEach(([id, sw]) => {
+  const b = $(id), set = v => { if (emu) emu.getControlPanel()[sw]().toggle(v); };
+  b.addEventListener("pointerdown", () => set(true));
+  ["pointerup", "pointerleave", "pointercancel"].forEach(n => b.addEventListener(n, () => set(false)));
+});
+
 setInk(S.ink);
+initEmu();
 open("Sample cart", sampleRom(), true);
-say("Sample loaded. Click a pixel to change it, or open your own ROM.");
+say("Sample running. Change a pixel of the invader at $0300 and watch the screen.");
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
 </script>
-
 </body></html>
