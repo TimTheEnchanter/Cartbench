@@ -264,7 +264,7 @@ dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric:
           <h2>Tables code reads</h2>
           <div class="findlist" id="tableList"></div>
           <p class="hint" id="tableEmpty" hidden>No tables found.</p>
-          <p class="hint">These are best guesses from the code. Addresses in the lists are file offsets. Jump tables and bank changes aren't followed, so if code shows as data, select its first byte and press Trace.</p>
+          <p class="hint">These are best guesses from the code. Addresses in the lists are file offsets. Bank switches and simple pointer jumps are followed, but jump tables aren't, so if code shows as data, select its first byte and press Trace.</p>
         </div>
       </div>
     </div>
@@ -768,42 +768,109 @@ function toOffset(addr, b) {
   const o = b.start + (addr & b.mask);
   return o < b.end ? o : null;
 }
+function hotspots(n) {
+  const first = { 8192: 0xFF8, 12288: 0xFF8, 16384: 0xFF6, 32768: 0xFF4 }[n];
+  return first === undefined ? null : { first, count: n / 4096 };
+}
+/* Follows the program path by path, tracking constants that reach pointers, so
+   bank switch stubs and JMP (pointer) dispatch can be resolved. */
 function trace() {
-  const n = S.rom.length, r = S.rom, mark = new Uint8Array(n), labels = new Set();
+  const n = S.rom.length, r = S.rom, mark = new Uint8Array(n), labels = new Set(), hot = hotspots(n);
+  const ptrs = new Set(), jumpPtrs = new Set(), W = new Map(), seen = new Set(), open = [], stack = [];
+  for (let i = 0; i + 2 < n; i++) if ((r[i] === 0x6C || r[i] === 0x91 || r[i] === 0xB1) && (r[i] !== 0x6C || r[i + 2] === 0)) {
+    ptrs.add(r[i + 1]); ptrs.add((r[i + 1] + 1) & 255);
+    if (r[i] === 0x6C) { jumpPtrs.add(r[i + 1]); jumpPtrs.add((r[i + 1] + 1) & 255); }
+  }
+  const ptrList = [...jumpPtrs];
+  const fresh = () => ({ a: null, x: null, y: null, z: {}, s: [] });
+  const fork = st => ({ a: st.a, x: st.x, y: st.y, z: { ...st.z }, s: st.s.slice() });
+  const note = (zp, v) => { if (!ptrs.has(zp)) return; if (!W.has(zp)) W.set(zp, new Set()); if (v !== null) W.get(zp).add(v); };
+  const push = (t, st) => { if (t !== null) { labels.add(t); stack.push({ o: t, st: fork(st) }); } };
   for (let bs = 0; bs < n; bs = bankOf(bs).end) {
-    const b = bankOf(bs), stack = [];
-    for (const v of [b.end - 4, b.end - 2]) if (v >= b.start) {
-      const t = toOffset(r[v] | r[v + 1] << 8, b); if (t !== null) { stack.push(t); labels.add(t); }
+    const b = bankOf(bs);
+    for (const v of [b.end - 4, b.end - 2]) if (v >= b.start) push(toOffset(r[v] | r[v + 1] << 8, b), fresh());
+  }
+  for (const e of S.entries) if (e < n) push(e, fresh());
+  // Rejects guessed targets that run into undocumented opcodes, which usually means data
+  const plausible = t => {
+    let o = t;
+    for (let i = 0; i < 24; i++) {
+      const b = bankOf(o), op = OPTABLE[r[o]];
+      if (op.illegal || o + op.len > b.end) return false;
+      if (op.mn === "rts" || op.mn === "rti" || op.mn === "jmp") return true;
+      o += op.len;
     }
-    for (const e of S.entries) if (e >= b.start && e < b.end) { stack.push(e); labels.add(e); }
-    while (stack.length) {
-      let o = stack.pop();
+    return true;
+  };
+  let steps = 0;
+  const run = () => {
+    while (stack.length && steps < 400000) {
+      let { o, st } = stack.pop();
       for (;;) {
-        if (o >= b.end || mark[o] === 2) break;
-        if (mark[o] === 1) break;
-        const op = OPTABLE[r[o]];
-        if (op.mn === "kil" || o + op.len > b.end) break;
+        if (o >= n || ++steps >= 400000) break;
+        const key = o + ":" + ptrList.map(p => st.z[p] ?? "").join() + ":" + st.s.join();
+        if (seen.has(key) || mark[o] === 2) break;
+        seen.add(key);
+        const b = bankOf(o), op = OPTABLE[r[o]], { mn, mode, len } = op;
+        if (mn === "kil" || o + len > b.end) break;
         let clash = false;
-        for (let i = 1; i < op.len; i++) if (mark[o + i] === 1) clash = true;
+        for (let i = 1; i < len; i++) if (mark[o + i] === 1) clash = true;
         if (clash) break;
-        mark[o] = 1; for (let i = 1; i < op.len; i++) mark[o + i] = 2;
-        const addr = b.base + (o - b.start);
-        if (op.mode === "rel") {
-          const t = toOffset((addr + 2 + (r[o + 1] << 24 >> 24)) & 0xFFFF, b);
-          if (t !== null) { stack.push(t); labels.add(t); }
-        } else if (op.mn === "jsr" || (op.mn === "jmp" && op.mode === "abs")) {
-          const t = toOffset(r[o + 1] | r[o + 2] << 8, b);
-          if (t !== null) { stack.push(t); labels.add(t); }
+        mark[o] = 1; for (let i = 1; i < len; i++) mark[o + i] = 2;
+        const v1 = r[o + 1], v2 = v1 | r[o + 2] << 8, addr = b.base + (o - b.start);
+        if (mode === "imm" && mn[0] === "l" && mn !== "lax") st[mn[2]] = v1;
+        else if ((mn === "lda" || mn === "ldx" || mn === "ldy") && mode === "zp") st[mn[2]] = st.z[v1] ?? null;
+        else if (mn === "lda" || mn === "ldx" || mn === "ldy" || mn === "lax") st[mn === "lax" ? "a" : mn[2]] = null;
+        else if ((mn === "sta" || mn === "stx" || mn === "sty") && mode === "zp") { const v = st[mn[2]]; if (ptrs.has(v1)) { st.z[v1] = v ?? undefined; note(v1, v); } }
+        else if (WRITES.has(mn) && mode === "zp") { delete st.z[v1]; }
+        else if (mn === "tax") st.x = st.a; else if (mn === "tay") st.y = st.a;
+        else if (mn === "txa") st.a = st.x; else if (mn === "tya") st.a = st.y;
+        else if (mn === "inx" || mn === "dex") st.x = null; else if (mn === "iny" || mn === "dey") st.y = null;
+        else if (mn === "pha") st.s.push(st.a ?? "?"); else if (mn === "pla") { st.s.pop(); st.a = null; }
+        else if (/^(adc|sbc|and|ora|eor|asl|lsr|rol|ror|anc|alr|arr|xaa)$/.test(mn)) st.a = null;
+        let next = o + len;
+        if (hot && mode === "abs" && (v2 & 0x1000)) {
+          const h = (v2 & 0xFFF) - hot.first;
+          if (h >= 0 && h < hot.count) next = h * 4096 + (next - b.start);      // the switch takes effect at the next fetch
         }
-        if (op.mn === "jmp" || op.mn === "rts" || op.mn === "rti" || op.mn === "brk") break;
-        o += op.len;
+        if (mode === "rel") push(toOffset((addr + 2 + (v1 << 24 >> 24)) & 0xFFFF, b), st);
+        else if (mn === "jsr") push(toOffset(v2, b), st);
+        else if (mn === "jmp" && mode === "abs") { const t = toOffset(v2, b); if (t === null) break; labels.add(t); o = t; continue; }
+        else if (mn === "jmp") {
+          const lo = st.z[v2 & 255], hi = st.z[(v2 + 1) & 255], t = lo != null && hi != null ? toOffset(lo | hi << 8, b) : null;
+          if (t !== null && plausible(t)) { labels.add(t); o = t; continue; }
+          open.push({ ptr: v2 & 255, b }); break;
+        } else if (mn === "rts") {
+          const lo = st.s.pop(), hi = st.s.pop();
+          if (typeof lo !== "number" || typeof hi !== "number") break;
+          const t = toOffset(((hi << 8 | lo) + 1) & 0xFFFF, b); if (t === null || !plausible(t)) break;
+          labels.add(t); o = t; continue;
+        }
+        if (mn === "jmp" || mn === "rti" || mn === "brk") break;
+        o = next;
       }
     }
+  };
+  run();
+  // Pointers set on another path: try every constant stored to them anywhere
+  for (let pass = 0, tried = new Set(); pass < 6; pass++) {
+    let added = false;
+    for (const { ptr, b } of open) {
+      const los = W.get(ptr) || [], his = W.get((ptr + 1) & 255) || [];
+      for (const lo of los) for (const hi of his) {
+        const t = toOffset(lo | hi << 8, b), id = t + "/" + ptr;
+        if (t === null || tried.has(id)) continue;
+        tried.add(id);
+        if (plausible(t)) { push(t, fresh()); added = true; }
+      }
+    }
+    if (!added) break;
+    run();
   }
-  return { mark, labels };
+  return { mark, labels, W };
 }
 function disassemble() {
-  const n = S.rom.length, r = S.rom, { mark, labels } = trace(), items = [];
+  const n = S.rom.length, r = S.rom, { mark, labels, W } = trace(), items = [];
   let codeBytes = 0, o = 0;
   while (o < n) {
     const b = bankOf(o), addr = b.base + (o - b.start);
@@ -834,11 +901,11 @@ function disassemble() {
       o = e;
     }
   }
-  const finds = scanFinds(items, mark);
+  const finds = scanFinds(items, mark, W);
   S.dis = { mark, items, codeBytes, ...finds };
 }
 const COLOR_REGS = new Set(["COLUP0", "COLUP1", "COLUPF", "COLUBK"]), GFX_REGS = new Set(["GRP0", "GRP1", "ENAM0", "ENAM1", "ENABL"]), PF_REGS = new Set(["PF0", "PF1", "PF2"]);
-function scanFinds(items, mark) {
+function scanFinds(items, mark, W) {
   const n = S.rom.length, colors = new Map(), tables = new Map(), recent = { a: [], x: [], y: [] };
   const addTable = (off, kind, by) => {
     const t = tables.get(off);
@@ -852,6 +919,7 @@ function scanFinds(items, mark) {
     if (mn === "lda" || mn === "ldx" || mn === "ldy" || (mn === "lax" && !it.op.illegal)) {
       const k = recent[mn[2]], t = it.target;
       if (mode === "imm") k.push({ imm: it.off + 1 });
+      else if (mode === "izy") k.push({ ptr: S.rom[it.off + 1], at: it.addr, b: bankOf(it.off) });
       else if (t !== null && mark[t] === 0) { k.push({ table: t, at: it.addr }); addTable(t, "Data", it.addr); }
       if (k.length > 3) k.shift();
       continue;
@@ -862,6 +930,13 @@ function scanFinds(items, mark) {
       if (!reg || reg === "WSYNC" || reg === "HMOVE" || reg === "VSYNC" || reg === "VBLANK") continue;
       for (const s of src) {
         if (s.imm !== undefined && COLOR_REGS.has(reg) && !colors.has(s.imm)) colors.set(s.imm, { off: s.imm, reg });
+        if (s.ptr !== undefined && (GFX_REGS.has(reg) || PF_REGS.has(reg) || COLOR_REGS.has(reg))) {
+          const kind = COLOR_REGS.has(reg) ? "Colors" : GFX_REGS.has(reg) ? "Sprite" : "Playfield";
+          for (const lo of W.get(s.ptr) || []) for (const hi of W.get((s.ptr + 1) & 255) || []) {
+            const t = toOffset(lo | hi << 8, s.b);
+            if (t !== null && mark[t] === 0) addTable(t, kind, s.at);
+          }
+        }
         if (s.table !== undefined) {
           if (COLOR_REGS.has(reg)) addTable(s.table, "Colors", s.at);
           else if (GFX_REGS.has(reg)) addTable(s.table, "Sprite", s.at);
@@ -878,6 +953,10 @@ function scanFinds(items, mark) {
     t.len = 0;
     for (let k = t.off; k < stop && k - t.off < 64 && mark[k] === 0; k++) t.len++;
   });
+  for (let i = list.length - 1; i > 0; i--) {       // joins tables split by pointers into the same data
+    const p = list[i - 1], t = list[i];
+    if (p.kind === t.kind && p.off + p.len === t.off) { p.len += t.len; list.splice(i, 1); }
+  }
   const order = { Sprite: 0, Playfield: 1, Colors: 2, Data: 3 };
   list.sort((p, q) => order[p.kind] - order[q.kind] || p.off - q.off);
   return { colors: [...colors.values()].sort((p, q) => p.off - q.off), tables: list };

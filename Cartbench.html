@@ -1,0 +1,1194 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Cartbench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Michroma&display=swap">
+<style>
+/* Layout: a walnut-and-black console faceplate. Cart map, bit grid and byte details sit side by side. */
+:root {
+  --walnut: #2b1a10;
+  --walnut-2: #3b2415;
+  --plate: #171210;
+  --plate-2: #211a16;
+  --plate-3: #30261f;
+  --line: #4a3a2e;
+  --ink: #f0e5d4;
+  --muted: #b7a48f;
+  --amber: #f0a63c;
+  --changed: #ff7a59;
+  --pixel-off: #0d0a08;
+  --display: "Michroma", "Eurostile", "Arial", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--plate); color: var(--ink);
+  font: 400 15px/1.4 var(--body);
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+.top {
+  background: repeating-linear-gradient(92deg, var(--walnut) 0 7px, var(--walnut-2) 7px 9px, var(--walnut) 9px 23px, #331f12 23px 24px);
+  border-bottom: 3px solid #000;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+}
+.brand { font: 400 19px/1 var(--display); letter-spacing: .04em; margin: 0; }
+.file { min-width: 0; flex: 1 1 200px; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.file b { font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  background: var(--plate-2); border: 1px solid var(--line); border-radius: 3px;
+  padding: 7px 12px; cursor: pointer; font-weight: 500; font-size: 14px;
+}
+.btn:hover:not(:disabled) { background: var(--plate-3); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: #1c1006; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: #ffbd5e; }
+
+.tools {
+  background: var(--plate-2); border-bottom: 1px solid #000;
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center;
+}
+.tool { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.tool select { background: var(--plate); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; color: var(--ink); }
+.tool input[type=range] { width: 100px; accent-color: var(--amber); }
+.tool input[type=checkbox] { accent-color: var(--amber); width: 16px; height: 16px; margin: 0; }
+.swatch { width: 24px; height: 24px; border: 1px solid var(--ink); border-radius: 3px; padding: 0; cursor: pointer; }
+.colorcode { font-family: var(--mono); color: var(--ink); }
+.popwrap { position: relative; display: flex; gap: 8px; align-items: center; }
+.palette {
+  position: absolute; z-index: 20; top: 32px; left: 0;
+  background: var(--plate); border: 1px solid var(--line); padding: 8px; border-radius: 3px;
+  display: grid; grid-template-columns: repeat(8, 20px); gap: 1px;
+  box-shadow: 0 8px 24px #000a;
+}
+.palette button { width: 20px; height: 14px; border: 0; padding: 0; cursor: pointer; }
+
+.sample {
+  color: #1c1006; background: var(--amber); font-size: 13px; font-weight: 500;
+  padding: 2px 7px; border-radius: 2px;
+}
+
+main {
+  min-height: 0; display: grid; gap: 14px;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.col { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.mapcol { overflow-y: auto; }
+h2 { font: 400 10.5px/1.3 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+
+#screenWrap { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; outline: 1px solid var(--line); flex: none; }
+#screenWrap:focus { outline: 2px solid var(--amber); }
+#screen { display: block; width: 100%; height: 100%; }
+#screenMsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; font-size: 14px; background: #000; }
+.emu-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.emu-row .tool input[type=range] { width: 70px; }
+#speed { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+#map { flex: none; width: 100%; image-rendering: pixelated; background: var(--pixel-off); border: 1px solid var(--line); cursor: pointer; display: block; }
+
+.tabs { display: flex; gap: 4px; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 2px 8px 4px; cursor: pointer; font: 400 10.5px/1.3 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tab:first-child { padding-left: 0; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--amber); }
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.codewrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 12px; }
+#codeScroll { min-height: 0; overflow: auto; background: var(--pixel-off); border: 1px solid var(--line); position: relative; }
+#codeSpacer { position: relative; min-width: 100%; }
+#codeWin { position: absolute; left: 0; right: 0; min-width: 330px; }
+.crow { display: flex; height: 20px; align-items: center; font: 400 12.5px/20px var(--mono); padding-right: 8px; white-space: nowrap; cursor: pointer; }
+.crow:hover { background: var(--plate-2); }
+.crow.on { background: var(--plate-3); box-shadow: inset 2px 0 var(--amber); }
+.crow.data { color: var(--muted); }
+.crow.chg .ci, .crow.chg .cb { color: var(--changed); }
+.ca { width: 62px; flex: none; color: var(--muted); white-space: pre; }
+.cb { width: 76px; flex: none; color: var(--muted); }
+.ci { flex: 1; }
+.crow.data .cb { display: none; }
+.ci button { background: none; border: 0; padding: 0; font: inherit; color: var(--amber); cursor: pointer; text-decoration: underline; }
+.finds { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.findlist { display: flex; flex-direction: column; }
+.findlist button { background: none; border: 0; border-top: 1px solid var(--plate-3); color: var(--ink); text-align: left; padding: 4px 0; cursor: pointer; font-size: 13px; }
+.findlist button:hover { color: var(--amber); }
+.cmpbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cmpwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; }
+#cmpList { min-height: 0; overflow: auto; }
+.cmprow { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--plate-3); }
+.cmprow.on { background: var(--plate-3); }
+.cmprow button { background: none; border: 0; cursor: pointer; padding: 5px 6px; font: inherit; font-size: 13px; }
+.cmprow .jump { font-family: var(--mono); text-align: left; flex: 1; white-space: pre-wrap; }
+.cmprow .rev { color: var(--muted); text-decoration: underline; }
+#cmpPreview { display: flex; gap: 14px; overflow-y: auto; align-items: flex-start; }
+#cmpPreview figure { margin: 0; display: flex; flex-direction: column; gap: 4px; width: 104px; }
+#cmpPreview figcaption { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+#cmpPreview canvas { width: 57px; image-rendering: pixelated; border: 1px solid var(--line); }
+#scroller { flex: 1; min-height: 0; overflow: auto; background: var(--pixel-off); border: 1px solid var(--line); }
+#spacer { position: relative; min-height: 100%; }
+#grid { position: sticky; top: 0; left: 0; display: block; touch-action: pan-y; cursor: crosshair; }
+
+dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.byte-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#byteInput {
+  width: 60px; background: var(--pixel-off); border: 1px solid var(--line); border-radius: 3px;
+  font: 500 17px var(--mono); padding: 4px 6px; text-transform: uppercase; text-align: center;
+}
+.tiny { padding: 5px 9px; font-size: 13px; }
+.colorchip { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--muted); vertical-align: -1px; }
+
+#hex { font: 400 12.5px/20px var(--mono); font-variant-numeric: tabular-nums; flex: 1; min-height: 120px; overflow: hidden; background: var(--pixel-off); border: 1px solid var(--line); padding: 4px 6px; }
+.hrow { display: flex; white-space: nowrap; }
+.haddr { color: var(--muted); width: 50px; }
+.hrow button { background: none; border: 0; padding: 0; width: 26px; cursor: pointer; font: inherit; text-align: center; }
+.hrow button:hover { background: var(--plate-3); }
+.hrow button.chg { color: var(--changed); }
+.hrow button.sel { background: var(--amber); color: #1c1006; }
+
+#changes { list-style: none; margin: 0; padding: 0; max-height: 116px; overflow: auto; font-size: 13px; }
+#changes li { display: flex; justify-content: space-between; gap: 8px; align-items: center; border-top: 1px solid var(--plate-3); padding: 2px 0; }
+#changes button { background: none; border: 0; cursor: pointer; padding: 2px 0; font: inherit; }
+#changes .jump { font-family: var(--mono); color: var(--changed); text-align: left; }
+#changes .rev { color: var(--muted); text-decoration: underline; }
+
+.foot {
+  background: var(--plate-2); border-top: 1px solid #000; font-size: 13px; color: var(--muted);
+  padding-block: 6px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px;
+}
+#status { color: var(--ink); }
+#status.err { color: var(--changed); font-weight: 500; }
+
+.drop { position: fixed; inset: 0; z-index: 50; background: #000c; display: grid; place-items: center; font: 400 20px var(--display); pointer-events: none; }
+
+@media (max-width: 1200px) and (min-width: 961px) {
+  main { grid-template-columns: 250px minmax(0, 1fr) 280px; }
+  .hrow button { width: 22px; }
+}
+@media (max-width: 960px) {
+  html, body { height: auto; }
+  body { display: block; }
+  main { grid-template-columns: minmax(0, 1fr); }
+  #scroller, .codewrap, .cmpwrap { flex: none; }
+  #scroller, #codeScroll { height: 62vh; }
+  .codewrap, .cmpwrap { grid-template-columns: minmax(0, 1fr); }
+  #cmpList { max-height: 40vh; }
+  .mapcol { order: 2; }
+  #map { max-width: 240px; }
+  #hex { flex: none; height: 200px; }
+}
+</style>
+
+<header class="top">
+  <h1 class="brand">Cartbench</h1>
+  <div class="file" id="fileInfo"></div>
+  <div class="actions">
+    <input id="fileInput" type="file" accept=".bin,.a26,.rom" hidden>
+    <button class="btn" id="openBtn">Open ROM</button>
+    <button class="btn" id="undoBtn">Undo</button>
+    <button class="btn" id="redoBtn">Redo</button>
+    <button class="btn primary" id="exportBtn">Export ROM</button>
+  </div>
+</header>
+
+<div class="tools">
+  <label class="tool" for="bpr">Bytes per row
+    <select id="bpr"><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option></select>
+  </label>
+  <label class="tool" for="zoom">Zoom <input id="zoom" type="range" min="8" max="28" step="2" value="16"></label>
+  <label class="tool" for="flip"><input id="flip" type="checkbox"> Upside down</label>
+  <div class="tool popwrap">Pixel color
+    <button class="swatch" id="swatch" aria-label="Choose pixel color" aria-expanded="false"></button>
+    <span class="colorcode" id="colorCode"></span>
+    <div class="palette" id="palette" hidden></div>
+  </div>
+</div>
+
+<main>
+  <section class="col mapcol">
+    <div class="col" id="emuPanel" style="flex:none">
+    <h2>Screen</h2>
+    <div id="screenWrap" tabindex="0" aria-label="Game screen. Focus here to play with the keyboard."><canvas id="screen"></canvas><div id="screenMsg">Starting the emulator…</div></div>
+    <div class="emu-row">
+      <button class="btn tiny" id="restartBtn">Restart</button>
+      <button class="btn tiny" id="pauseBtn">Pause</button>
+      <button class="btn tiny" id="selectSw">Game Select</button>
+      <button class="btn tiny" id="resetSw">Game Reset</button>
+    </div>
+    <div class="emu-row">
+      <label class="tool" for="tvMode">TV <select id="tvMode"><option value="ntsc">NTSC</option><option value="pal">PAL</option></select></label>
+      <label class="tool" for="vol">Sound <input id="vol" type="range" min="0" max="100" value="30"></label>
+      <span id="speed"></span>
+    </div>
+    <label class="tool" for="autoRun"><input id="autoRun" type="checkbox" checked> Restart game after each edit</label>
+    <p class="hint">Click the screen to play: arrow keys and Space.</p>
+    </div>
+    <h2>Cart map</h2>
+    <canvas id="map" aria-label="Overview of the whole ROM. Click to jump."></canvas>
+    <p class="hint">Every byte in the cart. Sprites look like tidy shapes among noisy code. Click to jump.</p>
+  </section>
+
+  <section class="col">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="grid" aria-selected="true">Bit grid</button>
+      <button class="tab" role="tab" data-view="code" aria-selected="false">Code</button>
+      <button class="tab" role="tab" data-view="compare" aria-selected="false">Compare</button>
+    </div>
+    <div class="view" id="gridView">
+      <div id="scroller"><div id="spacer"><canvas id="grid" tabindex="0" aria-label="ROM bytes as rows of pixels. Click or drag to draw."></canvas></div></div>
+    </div>
+    <div class="view" id="codeView" hidden>
+      <div class="cmpbar"><span class="hint" id="codeSummary"></span><button class="btn tiny" id="sourceBtn">Export source</button></div>
+      <div class="codewrap">
+        <div id="codeScroll"><div id="codeSpacer"><div id="codeWin"></div></div></div>
+        <div class="finds">
+          <h2>Colors set in code</h2>
+          <div class="findlist" id="colorList"></div>
+          <p class="hint" id="colorEmpty" hidden>No fixed color values found.</p>
+          <h2>Tables code reads</h2>
+          <div class="findlist" id="tableList"></div>
+          <p class="hint" id="tableEmpty" hidden>No tables found.</p>
+          <p class="hint">These are best guesses from the code. Addresses in the lists are file offsets. Bank switches and simple pointer jumps are followed, but jump tables aren't, so if code shows as data, select its first byte and press Trace.</p>
+        </div>
+      </div>
+    </div>
+    <div class="view" id="compareView" hidden>
+      <input id="cmpInput" type="file" accept=".bin,.a26,.rom" hidden>
+      <div id="cmpEmpty" hidden><p class="hint">Open a second ROM, such as an existing hack, to see which bytes differ from yours.</p><button class="btn" id="cmpEmptyBtn">Choose ROM to compare</button></div>
+      <div class="view" id="cmpBody">
+        <div class="cmpbar"><span class="hint" id="cmpSummary"></span><button class="btn tiny" id="applyAllBtn">Apply all</button><button class="btn tiny" id="cmpOpenBtn">Choose another ROM</button></div>
+        <div class="cmpwrap">
+          <div id="cmpList"></div>
+          <div id="cmpPreview">
+            <figure><canvas id="cmpA"></canvas><figcaption>Your ROM</figcaption></figure>
+            <figure><canvas id="cmpB"></canvas><figcaption id="cmpBLabel"></figcaption></figure>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="col">
+    <h2>Selected byte</h2>
+    <div class="byte-row">
+      <input id="byteInput" maxlength="2" spellcheck="false" autocomplete="off" aria-label="Selected byte in hexadecimal">
+      <button class="btn tiny" id="invertBtn">Invert</button>
+      <button class="btn tiny" id="clearBtn">Clear</button>
+      <button class="btn tiny" id="revertBtn">Restore</button>
+      <button class="btn tiny" id="traceBtn">Trace</button>
+    </div>
+    <dl>
+      <dt>File offset</dt><dd id="iOffset"></dd>
+      <dt>Cart address</dt><dd id="iAddr"></dd>
+      <dt>Binary</dt><dd id="iBin"></dd>
+      <dt>Decimal</dt><dd id="iDec"></dd>
+      <dt>Traced as</dt><dd id="iKind"></dd>
+      <dt>As TIA color</dt><dd id="iColor"></dd>
+    </dl>
+    <h2>Hex</h2>
+    <div id="hex"></div>
+    <h2 id="changesTitle">Changes</h2>
+    <ul id="changes"></ul>
+  </section>
+</main>
+
+<footer class="foot">
+  <span id="status" role="status">Ready</span>
+  <span>Your ROM stays in this browser and is never uploaded.<span id="emuCredit"> Emulation by <a href="https://github.com/6502ts/6502.ts" style="color:inherit">Stellerator</a>, MIT license.</span></span>
+</footer>
+<div class="drop" id="drop" hidden>Drop ROM to open</div>
+
+<script src="stellerator-embedded.js"></script>
+<script>
+"use strict";
+/* NTSC TIA palette: 16 hues, 8 luminance steps. */
+const TIA = ("000000 404040 6c6c6c 909090 b0b0b0 c8c8c8 dcdcdc ececec 444400 646410 848424 a0a034 b8b840 d0d050 e8e85c fcfc68 " +
+"702800 844414 985c28 ac783c bc8c4c cca05c dcb468 ecc878 841800 983418 ac5030 c06848 d0805c e09470 eca880 fcbc94 " +
+"880000 9c2020 b03c3c c05858 d07070 e08888 eca0a0 fcb4b4 78005c 8c2074 a03c88 b0589c c070b0 d084c0 dc9cd0 ecb0e0 " +
+"480078 602090 783ca4 8c58b8 a070cc b484dc c49cec d4b0fc 140084 302098 4c3cac 6858c0 7c70d0 9488e0 a8a0ec bcb4fc " +
+"000088 1c209c 3840b0 505cc0 6874d0 7c8ce0 90a4ec a4b8fc 00187c 1c3890 3854a8 5070bc 6888cc 7c9cdc 90b4ec a4c8fc " +
+"002c5c 1c4c78 386890 5084ac 689cc0 7cb4d4 90cce8 a4e0fc 003c2c 1c5c48 387c64 509c80 68b494 7cd0ac 90e4c0 a4fcd4 " +
+"003c00 205c20 407c40 5c9c5c 74b474 8cd08c a4e4a4 b8fcb8 143800 345c1c 507c38 6c9850 84b468 9ccc7c b4e490 c8fca4 " +
+"2c3000 4c501c 687034 848c4c 9ca864 b4c078 ccd488 e0ec9c 442800 644818 846830 a08444 b89c58 d0b46c e8cc7c fce08c").split(" ").map(c => "#" + c);
+const tiaColor = v => TIA[v >> 1];   // bit 0 of a TIA color is ignored
+
+const $ = id => document.getElementById(id);
+const hex2 = v => v.toString(16).toUpperCase().padStart(2, "0");
+const hex4 = v => v.toString(16).toUpperCase().padStart(4, "0");
+const GUTTER = 66, GAP = 8, HEXCOL = 34;
+
+const S = { name: "", orig: new Uint8Array(0), rom: new Uint8Array(0), sample: false, sel: 0,
+  bpr: 1, px: 16, flip: false, ink: 0x1E, undo: [], redo: [], tx: null, paint: 0, last: null,
+  view: "grid", entries: new Set(), dis: null, cmp: null, cmpSel: 0 };
+
+/* ---------- Built-in sample: a tiny original program. Joystick moves the invader. ---------- */
+const SAMPLE_CODE = "78d8a2ff9aa9009500cad0fba94c8581a9328580a90285018500850285028502a9008500a92b8d9602ada0f38509ada2f38506ada3f38507ad80020ab002e6800ab002c6800ab002e6810ab002c681a580c9c89004a9008580c9989004a9978580a580a20020c0f0a96ea20120c0f08502852aad8402d0fb85028501a2008a38e581c910b0094aa8b900f39004b002a9008502851b8a38e958c910b0094aa8b910f39004b002a900851ce8e0c0d0cfa9028501a9238d9602ad8402d0fb4c14f0850238e90fb0fc49070a0a0a0a9520951060";
+function sampleRom() {
+  const r = new Uint8Array(4096);
+  let x = 0x5A;
+  for (let i = 0; i < 0x300; i++) { x = (x * 13 + 41) & 255; r[i] = x; }     // unused filler
+  for (let i = 0; i < SAMPLE_CODE.length / 2; i++) r[i] = parseInt(SAMPLE_CODE.substr(i * 2, 2), 16);
+  const put = (o, rows) => { rows.forEach((s, i) => { r[o + i] = parseInt(s.replace(/\./g, "0").replace(/#/g, "1"), 2); }); };
+  put(0x300, ["...##...","..####..",".######.","##.##.##","########","..#..#..",".#.##.#.","#.#..#.#"]);           // invader
+  put(0x310, ["...##...","...##...","..####..","..#..#..",".######.","########","##.##.##","#..##..#"]);           // rocket
+  put(0x320, ["..####..",".#....#.","#.#..#.#","#......#","#.#..#.#","#..##..#",".#....#.","..####.."]);           // face
+  put(0x330, ["..#..#..","...##...",".######.","##.##.##","########",".######.","..#..#..",".#....#."]);           // robot
+  put(0x340, ["..####..",".#....#.","#.#..#.#","#......#","#.#..#.#","#..##..#",".#....#.","..####.."].reverse()); // upside-down face
+  const digits = [[60,102,110,118,102,102,60,0],[24,56,24,24,24,24,126,0],[60,102,6,28,48,96,126,0],[60,102,6,28,6,102,60,0],[12,28,60,108,126,12,12,0]];
+  digits.forEach((d, i) => d.forEach((b, j) => { r[0x360 + i * 8 + j] = b; }));
+  [0x96,0x34,0x1E,0xC8,0x46,0x0E,0x84,0x2A].forEach((c, i) => { r[0x3A0 + i] = c; });  // color table
+  r[0xFFC] = 0x00; r[0xFFD] = 0xF0; r[0xFFE] = 0x00; r[0xFFF] = 0xF0;       // reset and IRQ vectors
+  return r;
+}
+
+function sampleHack(rom) {
+  const h = rom.slice();
+  [0x3C,0x7E,0xDB,0xFF,0x66,0x3C,0x18,0x24].forEach((v, i) => { h[0x300 + i] = v; });   // redrawn invader
+  h[0x3A0] = 0x84; h[0x3A2] = 0x3E;                                                      // new colors
+  return h;
+}
+
+/* ---------- Geometry ---------- */
+const rowCount = () => Math.ceil(S.rom.length / S.bpr);
+const rowOffset = r => (S.flip ? rowCount() - 1 - r : r) * S.bpr;
+const offsetRow = o => { const r = Math.floor(o / S.bpr); return S.flip ? rowCount() - 1 - r : r; };
+
+function hit(e) {
+  const b = gridEl.getBoundingClientRect();
+  const x = e.clientX - b.left + scroller.scrollLeft, y = e.clientY - b.top + scroller.scrollTop;
+  const r = Math.floor(y / S.px);
+  if (r < 0 || r >= rowCount()) return null;
+  const cell = 8 * S.px + GAP;
+  let i = Math.floor((x - GUTTER) / cell);
+  const inBits = x >= GUTTER && i < S.bpr && x - GUTTER - i * cell < 8 * S.px;
+  i = Math.max(0, Math.min(S.bpr - 1, i));
+  const off = rowOffset(r) + i;
+  if (off >= S.rom.length) return null;
+  return { off, bit: inBits ? 7 - Math.floor((x - GUTTER - i * cell) / S.px) : null };
+}
+
+/* ---------- Editing ---------- */
+function setByte(off, val) {
+  if (!S.tx) S.tx = new Map();
+  if (!S.tx.has(off)) S.tx.set(off, S.rom[off]);
+  S.rom[off] = val;
+}
+function commit() {
+  if (!S.tx) return;
+  const list = [...S.tx].filter(([o, b]) => S.rom[o] !== b).map(([o, b]) => [o, b, S.rom[o]]);
+  S.tx = null;
+  if (list.length) { S.undo.push(list); S.redo = []; romEdited(); }
+  draw();
+}
+function step(from, to, idx, word) {
+  const t = from.pop();
+  if (!t) return;
+  t.forEach(e => { S.rom[e[0]] = e[idx]; });
+  to.push(t);
+  S.sel = t[0][0]; ensureVisible(); say(word); romEdited(); draw();
+}
+const undo = () => step(S.undo, S.redo, 1, "Undid the last edit");
+const redo = () => step(S.redo, S.undo, 2, "Redid the edit");
+
+function changeRanges() {
+  const out = []; let start = -1;
+  for (let i = 0; i <= S.rom.length; i++) {
+    const c = i < S.rom.length && S.rom[i] !== S.orig[i];
+    if (c && start < 0) start = i;
+    if (!c && start >= 0) { out.push([start, i - 1]); start = -1; }
+  }
+  return out;
+}
+
+/* ---------- Loading ---------- */
+function describeSize(n) {
+  if (n === 2048) return "2K, no bank switching";
+  if (n === 4096) return "4K, no bank switching";
+  if (n % 4096 === 0) return (n / 1024) + "K, likely " + (n / 4096) + " banks of 4K";
+  return n.toLocaleString() + " bytes, unusual size";
+}
+function open(name, bytes, sample) {
+  Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null, entries: new Set(), cmpSel: 0 });
+  S.cmp = sample ? { name: "Sample hack", bytes: sampleHack(bytes) } : null;
+  runDis();
+  renderInfo(); layout(); scroller.scrollTop = 0;
+  if (sample) { S.sel = 0x300; S.flip = false; $("flip").checked = false; layout(); scroller.scrollTop = 0x2F8 * S.px; }
+  runRom();
+  draw();
+}
+function validate(bytes) {
+  if (!bytes.length) return "That file is empty. Choose a .bin or .a26 ROM.";
+  if (bytes[0] === 0x50 && bytes[1] === 0x4B) return "That file is a zip archive. Unzip it, then open the .bin or .a26 inside.";
+  if (bytes.length > 1 << 20) return "That file is over 1 MB, which is too large to be an Atari 2600 ROM.";
+  return null;
+}
+async function loadFile(f) {
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const err = validate(bytes);
+    if (err) return say(err, true);
+    open(f.name, bytes, false);
+    say("Opened " + f.name + ". Sprites are often stored upside down, so try that option if shapes look wrong.");
+  } catch (e) { say("That file could not be read. Try choosing it again.", true); }
+}
+function renderInfo() {
+  const el = $("fileInfo"); el.textContent = "";
+  const b = document.createElement("b"); b.textContent = S.name; el.append(b, " · " + describeSize(S.rom.length) + " ");
+  if (S.sample) { const t = document.createElement("span"); t.className = "sample"; t.textContent = "Sample cart, made for Cartbench"; el.append(t); }
+}
+
+/* ---------- Export: .bin is not an allowed save type here, so the ROM ships in a zip ---------- */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(d) { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = CRC[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStored(name, data) {
+  const fn = new TextEncoder().encode(name), crc = crc32(data), n = fn.length, z = data.length;
+  const out = new Uint8Array(30 + n + z + 46 + n + 22), v = new DataView(out.buffer);
+  const head = (p, central) => {
+    let q = p;
+    if (central) { v.setUint32(q, 0x02014B50, true); v.setUint16(q + 4, 20, true); q += 6; }
+    else { v.setUint32(q, 0x04034B50, true); q += 4; }
+    v.setUint16(q, 20, true); v.setUint16(q + 2, 0x0800, true); v.setUint16(q + 4, 0, true);
+    v.setUint16(q + 6, 0, true); v.setUint16(q + 8, 0x5D61, true);          // fixed date, 2026-11-01
+    v.setUint32(q + 10, crc, true); v.setUint32(q + 14, z, true); v.setUint32(q + 18, z, true);
+    v.setUint16(q + 22, n, true); v.setUint16(q + 24, 0, true);
+    return q + 26;
+  };
+  let p = head(0, false); out.set(fn, p); p += n; out.set(data, p); p += z;
+  const cd = p;
+  p = head(p, true);                 // comment, disk, attrs and local offset stay zero
+  p += 14; out.set(fn, p); p += n;
+  v.setUint32(p, 0x06054B50, true); v.setUint16(p + 8, 1, true); v.setUint16(p + 10, 1, true);
+  v.setUint32(p + 12, p - cd, true); v.setUint32(p + 16, cd, true);
+  return out;
+}
+const baseName = () => (S.name.replace(/\.[^.]*$/, "").replace(/[^\w.-]+/g, "_") || "rom");
+async function saveFile(name, bytes, done) {
+  const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : undefined;
+  if (dl === undefined) {       // opened outside the viewer: a normal download works
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([bytes])); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    return say(done);
+  }
+  if (!dl) return say("Saving isn't available in this view. Open the page in claude.ai and try again.", true);
+  try {
+    await dl.save({ filename: name, data: new Blob([bytes]) });
+    say(done);
+  } catch (e) {
+    if (e && e.code === "declined") say("Export canceled. Your edits are still here.");
+    else if (e && e.code === "rate_limited") say("A save prompt is already open. Finish that one, then try again.", true);
+    else say("The file couldn't be saved. Your edits are still here, so try again.", true);
+  }
+}
+function exportRom() {
+  const base = baseName() + "-hacked", ext = /\.a26$/i.test(S.name) ? ".a26" : ".bin";
+  if (window.claude && window.claude.use) return saveFile(base + ".zip", zipStored(base + ext, S.rom), "Saved " + base + ".zip. Stella opens it directly. For other emulators, unzip it first.");
+  return saveFile(base + ext, S.rom, "Exported " + base + ext);
+}
+
+/* ---------- Drawing ---------- */
+const scroller = $("scroller"), spacer = $("spacer"), gridEl = $("grid"), mapEl = $("map"), g = gridEl.getContext("2d");
+let queued = false;
+function draw() { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; renderAll(); }); }
+function layout() {
+  spacer.style.height = rowCount() * S.px + "px";
+  spacer.style.width = GUTTER + S.bpr * (8 * S.px + GAP) + S.bpr * HEXCOL + "px";
+  spacer.style.minWidth = "100%";
+}
+function renderGrid() {
+  if (S.view !== "grid") return;
+  const W = scroller.clientWidth, H = scroller.clientHeight, d = window.devicePixelRatio || 1;
+  if (gridEl.width !== Math.round(W * d) || gridEl.height !== Math.round(H * d)) {
+    gridEl.width = Math.round(W * d); gridEl.height = Math.round(H * d);
+    gridEl.style.width = W + "px"; gridEl.style.height = H + "px";
+  }
+  g.setTransform(d, 0, 0, d, 0, 0);
+  g.fillStyle = "#0d0a08"; g.fillRect(0, 0, W, H);
+  g.font = '500 12px "IBM Plex Mono", monospace'; g.textBaseline = "middle";
+  const px = S.px, sx = scroller.scrollLeft, sy = scroller.scrollTop, cell = 8 * px + GAP, ink = tiaColor(S.ink);
+  const first = Math.floor(sy / px), last = Math.min(rowCount() - 1, Math.ceil((sy + H) / px));
+  for (let r = first; r <= last; r++) {
+    const y = r * px - sy, base = rowOffset(r);
+    const hasSel = S.sel >= base && S.sel < base + S.bpr;
+    if (hasSel) { g.fillStyle = "#30261f"; g.fillRect(0, y, W, px); }
+    if (px >= 12 || r % 2 === 0) { g.fillStyle = "#b7a48f"; g.fillText("$" + hex4(base), 6 - sx, y + px / 2); }
+    for (let i = 0; i < S.bpr; i++) {
+      const o = base + i; if (o >= S.rom.length) break;
+      const v = S.rom[o], x0 = GUTTER + i * cell - sx, chg = v !== S.orig[o];
+      if (chg) { g.fillStyle = "#ff7a59"; g.fillRect(x0 - 5, y, 3, px); }
+      for (let b = 0; b < 8; b++) {
+        g.fillStyle = v & (128 >> b) ? ink : (r + b) % 2 ? "#1d1612" : "#171210";
+        g.fillRect(x0 + b * px, y, px - 1, px - 1);
+      }
+      if (o === S.sel) { g.strokeStyle = "#f0a63c"; g.lineWidth = 2; g.strokeRect(x0 - 1, y - .5, 8 * px + 1, px + 1); }
+      g.fillStyle = chg ? "#ff7a59" : "#b7a48f";
+      if (px >= 12 || r % 2 === 0) g.fillText(hex2(v), GUTTER + S.bpr * cell + i * HEXCOL - sx, y + px / 2);
+    }
+  }
+}
+function renderMap() {
+  const n = S.rom.length, cols = 32, colBytes = Math.ceil(n / cols), w = cols * 8, h = colBytes;
+  if (mapEl.width !== w || mapEl.height !== h) { mapEl.width = w; mapEl.height = h; }
+  const c = mapEl.getContext("2d"), img = c.createImageData(w, h), D = img.data;
+  const inkHex = tiaColor(S.ink), ir = parseInt(inkHex.slice(1, 3), 16), ig = parseInt(inkHex.slice(3, 5), 16), ib = parseInt(inkHex.slice(5, 7), 16);
+  for (let o = 0; o < n; o++) {
+    const cx = Math.floor(o / colBytes) * 8, y = o % colBytes, chg = S.rom[o] !== S.orig[o];
+    for (let b = 0; b < 8; b++) {
+      const p = (y * w + cx + b) * 4, on = S.rom[o] & (128 >> b);
+      D[p] = on ? (chg ? 255 : ir) : 13; D[p + 1] = on ? (chg ? 122 : ig) : 10; D[p + 2] = on ? (chg ? 89 : ib) : 8; D[p + 3] = 255;
+    }
+  }
+  c.putImageData(img, 0, 0);
+  if (S.view !== "grid") { c.fillStyle = "#f0a63c"; c.fillRect(Math.floor(S.sel / colBytes) * 8, S.sel % colBytes, 8, Math.max(1, h / 128)); return; }
+  const s = rowOffset(Math.floor(scroller.scrollTop / S.px));
+  const vis = Math.ceil(scroller.clientHeight / S.px) * S.bpr, top = S.flip ? Math.max(0, s - vis) : s;
+  c.strokeStyle = "#f0a63c"; c.lineWidth = Math.max(1, h / 256);
+  c.strokeRect(Math.floor(top / colBytes) * 8 + .5, top % colBytes + .5, 7, Math.min(vis, colBytes - top % colBytes) - 1);
+}
+function renderHex() {
+  const box = $("hex"), rows = Math.max(4, Math.floor((box.clientHeight - 8) / 20));
+  let top = S.view === "grid" ? rowOffset(Math.floor(scroller.scrollTop / S.px)) : S.sel;
+  if (S.sel < top || S.sel >= top + rows * 8) top = S.sel;
+  top = Math.max(0, Math.min(top & ~7, Math.max(0, (S.rom.length + 7 & ~7) - rows * 8)));
+  const f = document.createDocumentFragment();
+  for (let r = 0; r < rows; r++) {
+    const base = top + r * 8; if (base >= S.rom.length) break;
+    const row = document.createElement("div"); row.className = "hrow";
+    const a = document.createElement("span"); a.className = "haddr"; a.textContent = "$" + hex4(base); row.append(a);
+    for (let i = 0; i < 8 && base + i < S.rom.length; i++) {
+      const o = base + i, b = document.createElement("button");
+      b.textContent = hex2(S.rom[o]); b.dataset.o = o; b.setAttribute("aria-label", "Byte " + hex4(o));
+      if (S.rom[o] !== S.orig[o]) b.classList.add("chg");
+      if (o === S.sel) b.classList.add("sel");
+      row.append(b);
+    }
+    f.append(row);
+  }
+  box.replaceChildren(f);
+}
+function cartAddress(o) {
+  const n = S.rom.length;
+  if (n === 2048) return "$" + hex4(0xF800 + o);
+  if (n <= 4096) return "$" + hex4(0xF000 + (o & 0xFFF));
+  return "Bank " + Math.floor(o / 4096) + ", $" + hex4(0xF000 + (o & 0xFFF));
+}
+function renderDetails() {
+  const o = S.sel, v = S.rom[o] ?? 0;
+  if (document.activeElement !== $("byteInput") || S.syncInput) { $("byteInput").value = hex2(v); S.syncInput = false; }
+  $("iOffset").textContent = "$" + hex4(o);
+  $("iAddr").textContent = cartAddress(o);
+  $("iBin").textContent = v.toString(2).padStart(8, "0").replace(/(....)/, "$1 ");
+  $("iDec").textContent = v;
+  $("iKind").textContent = !S.dis ? "" : S.dis.mark[o] === 1 ? "Code, instruction start" : S.dis.mark[o] === 2 ? "Code, operand" : "Data";
+  const chip = document.createElement("span"); chip.className = "colorchip"; chip.style.background = tiaColor(v);
+  $("iColor").replaceChildren(chip, " $" + hex2(v & 0xFE));
+  $("revertBtn").disabled = S.rom[o] === S.orig[o];
+  $("undoBtn").disabled = !S.undo.length; $("redoBtn").disabled = !S.redo.length;
+  const ranges = changeRanges(), total = ranges.reduce((t, r) => t + r[1] - r[0] + 1, 0);
+  $("changesTitle").textContent = total ? "Changes: " + total + (total === 1 ? " byte" : " bytes") : "Changes: none yet";
+  const ul = $("changes"), f = document.createDocumentFragment();
+  ranges.slice(0, 100).forEach(([a, b]) => {
+    const li = document.createElement("li"), j = document.createElement("button"), x = document.createElement("button");
+    j.className = "jump"; j.dataset.jump = a; j.textContent = "$" + hex4(a) + (b > a ? "–$" + hex4(b) : "");
+    x.className = "rev"; x.dataset.a = a; x.dataset.b = b; x.textContent = "Restore";
+    li.append(j, x); f.append(li);
+  });
+  ul.replaceChildren(f);
+}
+function renderAll() {
+  renderGrid(); renderMap(); renderHex(); renderDetails();
+  if (S.view === "code") renderCode();
+  if (S.view === "compare") renderCompare();
+}
+
+function ensureVisible() {
+  if (S.view !== "grid") return;
+  const y = offsetRow(S.sel) * S.px, h = scroller.clientHeight;
+  if (y < scroller.scrollTop || y + S.px > scroller.scrollTop + h) scroller.scrollTop = y - h / 2;
+}
+function select(o) { S.sel = Math.max(0, Math.min(S.rom.length - 1, o)); if (S.view === "grid") ensureVisible(); if (S.view === "code") revealCode(); S.syncInput = true; draw(); }
+function say(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+/* ---------- Grid input ---------- */
+let painting = false;
+function paintAt(h) {
+  if (!h || h.bit === null) return;
+  const v = S.rom[h.off], next = S.paint ? v | (1 << h.bit) : v & ~(1 << h.bit);
+  if (next !== v) setByte(h.off, next);
+  if (S.sel !== h.off) { S.sel = h.off; S.syncInput = true; }
+  draw();
+}
+gridEl.addEventListener("pointerdown", e => {
+  const h = hit(e); if (!h) return;
+  gridEl.focus({ preventScroll: true });
+  S.sel = h.off; S.syncInput = true;
+  if (h.bit !== null) {
+    S.paint = S.rom[h.off] & (1 << h.bit) ? 0 : 1;
+    painting = true; gridEl.setPointerCapture(e.pointerId); paintAt(h);
+  }
+  draw();
+});
+gridEl.addEventListener("pointermove", e => {
+  const h = hit(e);
+  if (painting) paintAt(h);
+  else if (h) $("status").textContent = "$" + hex4(h.off) + (h.bit !== null ? ", bit " + h.bit : "");
+});
+const endPaint = () => { if (painting) { painting = false; commit(); } };
+gridEl.addEventListener("pointerup", endPaint);
+gridEl.addEventListener("pointercancel", endPaint);
+scroller.addEventListener("scroll", draw, { passive: true });
+window.addEventListener("resize", draw);
+
+function arrow(key) {
+  const d = { ArrowUp: S.flip ? S.bpr : -S.bpr, ArrowDown: S.flip ? -S.bpr : S.bpr, ArrowLeft: -1, ArrowRight: 1 }[key];
+  if (d) { select(S.sel + d); return true; }
+  return false;
+}
+document.addEventListener("keydown", e => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
+  if (document.activeElement === gridEl) {
+    if (arrow(e.key)) e.preventDefault();
+    else if (/^[0-9a-fA-F]$/.test(e.key) && !mod) { $("byteInput").focus(); $("byteInput").value = ""; }
+  }
+});
+
+/* ---------- Byte controls ---------- */
+const byteInput = $("byteInput");
+byteInput.addEventListener("focus", () => byteInput.select());
+byteInput.addEventListener("input", () => {
+  byteInput.value = byteInput.value.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+  if (byteInput.value.length === 2) {
+    setByte(S.sel, parseInt(byteInput.value, 16)); commit();
+    select(S.sel + 1); renderDetails(); byteInput.select();
+  }
+});
+byteInput.addEventListener("blur", () => { S.syncInput = true; draw(); });
+byteInput.addEventListener("keydown", e => {
+  if (e.key.startsWith("Arrow")) { e.preventDefault(); arrow(e.key); renderDetails(); byteInput.select(); }
+});
+$("invertBtn").onclick = () => { setByte(S.sel, S.rom[S.sel] ^ 255); S.syncInput = true; commit(); };
+$("clearBtn").onclick = () => { setByte(S.sel, 0); S.syncInput = true; commit(); };
+$("revertBtn").onclick = () => { setByte(S.sel, S.orig[S.sel]); S.syncInput = true; commit(); };
+$("hex").addEventListener("click", e => { const o = e.target.dataset.o; if (o !== undefined) { select(+o); byteInput.focus(); } });
+$("changes").addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.jump !== undefined) select(+t.dataset.jump);
+  if (t.dataset.a !== undefined) { for (let i = +t.dataset.a; i <= +t.dataset.b; i++) setByte(i, S.orig[i]); S.syncInput = true; commit(); say("Restored the original bytes"); }
+});
+$("map").addEventListener("click", e => {
+  const b = mapEl.getBoundingClientRect(), colBytes = mapEl.height;
+  const col = Math.min(31, Math.floor((e.clientX - b.left) / b.width * 32));
+  const y = Math.floor((e.clientY - b.top) / b.height * colBytes);
+  select(Math.min(S.rom.length - 1, col * colBytes + y));
+});
+
+/* ---------- Toolbar ---------- */
+$("undoBtn").onclick = undo; $("redoBtn").onclick = redo; $("exportBtn").onclick = exportRom;
+$("openBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
+$("bpr").onchange = e => { S.bpr = +e.target.value; layout(); ensureVisible(); draw(); };
+$("zoom").oninput = e => { S.px = +e.target.value; layout(); ensureVisible(); draw(); };
+$("flip").onchange = e => { S.flip = e.target.checked; ensureVisible(); draw(); };
+function setInk(v) { S.ink = v; $("swatch").style.background = tiaColor(v); $("colorCode").textContent = "$" + hex2(v); draw(); }
+const pal = $("palette");
+for (let h = 0; h < 16; h++) for (let l = 0; l < 8; l++) {
+  const v = h << 4 | l << 1, b = document.createElement("button");
+  b.style.background = tiaColor(v); b.dataset.v = v; b.setAttribute("aria-label", "TIA color " + hex2(v)); pal.append(b);
+}
+$("swatch").onclick = e => { e.stopPropagation(); pal.hidden = !pal.hidden; $("swatch").setAttribute("aria-expanded", !pal.hidden); };
+pal.onclick = e => { if (e.target.dataset.v) setInk(+e.target.dataset.v); };
+document.addEventListener("click", () => { pal.hidden = true; $("swatch").setAttribute("aria-expanded", "false"); });
+
+let dragDepth = 0;
+addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; $("drop").hidden = false; });
+addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").hidden = true; } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e => {
+  e.preventDefault(); dragDepth = 0; $("drop").hidden = true;
+  const f = e.dataTransfer.files[0]; if (f) loadFile(f);
+});
+
+/* ---------- Disassembler: traces code from the reset vector, like DiStella ---------- */
+const OPTABLE = ("brk imp|ora izx|*kil imp|*slo izx|*nop zp|ora zp|asl zp|*slo zp|php imp|ora imm|asl imp|*anc imm|*nop abs|ora abs|asl abs|*slo abs|" +
+"bpl rel|ora izy|*kil imp|*slo izy|*nop zpx|ora zpx|asl zpx|*slo zpx|clc imp|ora aby|*nop imp|*slo aby|*nop abx|ora abx|asl abx|*slo abx|" +
+"jsr abs|and izx|*kil imp|*rla izx|bit zp|and zp|rol zp|*rla zp|plp imp|and imm|rol imp|*anc imm|bit abs|and abs|rol abs|*rla abs|" +
+"bmi rel|and izy|*kil imp|*rla izy|*nop zpx|and zpx|rol zpx|*rla zpx|sec imp|and aby|*nop imp|*rla aby|*nop abx|and abx|rol abx|*rla abx|" +
+"rti imp|eor izx|*kil imp|*sre izx|*nop zp|eor zp|lsr zp|*sre zp|pha imp|eor imm|lsr imp|*alr imm|jmp abs|eor abs|lsr abs|*sre abs|" +
+"bvc rel|eor izy|*kil imp|*sre izy|*nop zpx|eor zpx|lsr zpx|*sre zpx|cli imp|eor aby|*nop imp|*sre aby|*nop abx|eor abx|lsr abx|*sre abx|" +
+"rts imp|adc izx|*kil imp|*rra izx|*nop zp|adc zp|ror zp|*rra zp|pla imp|adc imm|ror imp|*arr imm|jmp ind|adc abs|ror abs|*rra abs|" +
+"bvs rel|adc izy|*kil imp|*rra izy|*nop zpx|adc zpx|ror zpx|*rra zpx|sei imp|adc aby|*nop imp|*rra aby|*nop abx|adc abx|ror abx|*rra abx|" +
+"*nop imm|sta izx|*nop imm|*sax izx|sty zp|sta zp|stx zp|*sax zp|dey imp|*nop imm|txa imp|*xaa imm|sty abs|sta abs|stx abs|*sax abs|" +
+"bcc rel|sta izy|*kil imp|*ahx izy|sty zpx|sta zpx|stx zpy|*sax zpy|tya imp|sta aby|txs imp|*tas aby|*shy abx|sta abx|*shx aby|*ahx aby|" +
+"ldy imm|lda izx|ldx imm|*lax izx|ldy zp|lda zp|ldx zp|*lax zp|tay imp|lda imm|tax imp|*lax imm|ldy abs|lda abs|ldx abs|*lax abs|" +
+"bcs rel|lda izy|*kil imp|*lax izy|ldy zpx|lda zpx|ldx zpy|*lax zpy|clv imp|lda aby|tsx imp|*las aby|ldy abx|lda abx|ldx aby|*lax aby|" +
+"cpy imm|cmp izx|*nop imm|*dcp izx|cpy zp|cmp zp|dec zp|*dcp zp|iny imp|cmp imm|dex imp|*axs imm|cpy abs|cmp abs|dec abs|*dcp abs|" +
+"bne rel|cmp izy|*kil imp|*dcp izy|*nop zpx|cmp zpx|dec zpx|*dcp zpx|cld imp|cmp aby|*nop imp|*dcp aby|*nop abx|cmp abx|dec abx|*dcp abx|" +
+"cpx imm|sbc izx|*nop imm|*isc izx|cpx zp|sbc zp|inc zp|*isc zp|inx imp|sbc imm|nop imp|*sbc imm|cpx abs|sbc abs|inc abs|*isc abs|" +
+"beq rel|sbc izy|*kil imp|*isc izy|*nop zpx|sbc zpx|inc zpx|*isc zpx|sed imp|sbc aby|*nop imp|*isc aby|*nop abx|sbc abx|inc abx|*isc abx").split("|").map(e => {
+  const [m, mode] = e.split(" "), illegal = m[0] === "*";
+  return { mn: illegal ? m.slice(1) : m, mode, illegal, len: mode === "imp" ? 1 : /^(abs|abx|aby|ind)$/.test(mode) ? 3 : 2 };
+});
+const TIA_W = "VSYNC VBLANK WSYNC RSYNC NUSIZ0 NUSIZ1 COLUP0 COLUP1 COLUPF COLUBK CTRLPF REFP0 REFP1 PF0 PF1 PF2 RESP0 RESP1 RESM0 RESM1 RESBL AUDC0 AUDC1 AUDF0 AUDF1 AUDV0 AUDV1 GRP0 GRP1 ENAM0 ENAM1 ENABL HMP0 HMP1 HMM0 HMM1 HMBL VDELP0 VDELP1 VDELBL RESMP0 RESMP1 HMOVE HMCLR CXCLR".split(" ");
+const TIA_R = "CXM0P CXM1P CXP0FB CXP1FB CXM0FB CXM1FB CXBLPF CXPPMM INPT0 INPT1 INPT2 INPT3 INPT4 INPT5".split(" ");
+const RIOT = { 0x280: "SWCHA", 0x281: "SWACNT", 0x282: "SWCHB", 0x283: "SWBCNT", 0x284: "INTIM", 0x285: "TIMINT", 0x294: "TIM1T", 0x295: "TIM8T", 0x296: "TIM64T", 0x297: "T1024T" };
+const WRITES = new Set("sta stx sty sax inc dec asl lsr rol ror slo rla sre rra dcp isc".split(" "));
+function regName(a, write) {
+  if (a in RIOT) return RIOT[a];
+  if (write) return a < 0x2D ? TIA_W[a] : null;
+  if (a < 14) return TIA_R[a];
+  if (a >= 0x30 && a < 0x3E) return TIA_R[a - 0x30] + "+$30";     // common mirror
+  return null;
+}
+function bankOf(off) {
+  const n = S.rom.length;
+  if (n <= 2048) return { start: 0, end: n, base: 0x10000 - 2048, mask: 2047 };
+  const start = off - off % 4096;
+  return { start, end: Math.min(start + 4096, n), base: 0xF000, mask: 4095 };
+}
+function toOffset(addr, b) {
+  if (!(addr & 0x1000)) return null;
+  const o = b.start + (addr & b.mask);
+  return o < b.end ? o : null;
+}
+function hotspots(n) {
+  const first = { 8192: 0xFF8, 12288: 0xFF8, 16384: 0xFF6, 32768: 0xFF4 }[n];
+  return first === undefined ? null : { first, count: n / 4096 };
+}
+/* Follows the program path by path, tracking constants that reach pointers, so
+   bank switch stubs and JMP (pointer) dispatch can be resolved. */
+function trace() {
+  const n = S.rom.length, r = S.rom, mark = new Uint8Array(n), labels = new Set(), hot = hotspots(n);
+  const ptrs = new Set(), jumpPtrs = new Set(), W = new Map(), seen = new Set(), open = [], stack = [];
+  for (let i = 0; i + 2 < n; i++) if ((r[i] === 0x6C || r[i] === 0x91 || r[i] === 0xB1) && (r[i] !== 0x6C || r[i + 2] === 0)) {
+    ptrs.add(r[i + 1]); ptrs.add((r[i + 1] + 1) & 255);
+    if (r[i] === 0x6C) { jumpPtrs.add(r[i + 1]); jumpPtrs.add((r[i + 1] + 1) & 255); }
+  }
+  const ptrList = [...jumpPtrs];
+  const fresh = () => ({ a: null, x: null, y: null, z: {}, s: [] });
+  const fork = st => ({ a: st.a, x: st.x, y: st.y, z: { ...st.z }, s: st.s.slice() });
+  const note = (zp, v) => { if (!ptrs.has(zp)) return; if (!W.has(zp)) W.set(zp, new Set()); if (v !== null) W.get(zp).add(v); };
+  const push = (t, st) => { if (t !== null) { labels.add(t); stack.push({ o: t, st: fork(st) }); } };
+  for (let bs = 0; bs < n; bs = bankOf(bs).end) {
+    const b = bankOf(bs);
+    for (const v of [b.end - 4, b.end - 2]) if (v >= b.start) push(toOffset(r[v] | r[v + 1] << 8, b), fresh());
+  }
+  for (const e of S.entries) if (e < n) push(e, fresh());
+  // Rejects guessed targets that run into undocumented opcodes, which usually means data
+  const plausible = t => {
+    let o = t;
+    for (let i = 0; i < 24; i++) {
+      const b = bankOf(o), op = OPTABLE[r[o]];
+      if (op.illegal || o + op.len > b.end) return false;
+      if (op.mn === "rts" || op.mn === "rti" || op.mn === "jmp") return true;
+      o += op.len;
+    }
+    return true;
+  };
+  let steps = 0;
+  const run = () => {
+    while (stack.length && steps < 400000) {
+      let { o, st } = stack.pop();
+      for (;;) {
+        if (o >= n || ++steps >= 400000) break;
+        const key = o + ":" + ptrList.map(p => st.z[p] ?? "").join() + ":" + st.s.join();
+        if (seen.has(key) || mark[o] === 2) break;
+        seen.add(key);
+        const b = bankOf(o), op = OPTABLE[r[o]], { mn, mode, len } = op;
+        if (mn === "kil" || o + len > b.end) break;
+        let clash = false;
+        for (let i = 1; i < len; i++) if (mark[o + i] === 1) clash = true;
+        if (clash) break;
+        mark[o] = 1; for (let i = 1; i < len; i++) mark[o + i] = 2;
+        const v1 = r[o + 1], v2 = v1 | r[o + 2] << 8, addr = b.base + (o - b.start);
+        if (mode === "imm" && mn[0] === "l" && mn !== "lax") st[mn[2]] = v1;
+        else if ((mn === "lda" || mn === "ldx" || mn === "ldy") && mode === "zp") st[mn[2]] = st.z[v1] ?? null;
+        else if (mn === "lda" || mn === "ldx" || mn === "ldy" || mn === "lax") st[mn === "lax" ? "a" : mn[2]] = null;
+        else if ((mn === "sta" || mn === "stx" || mn === "sty") && mode === "zp") { const v = st[mn[2]]; if (ptrs.has(v1)) { st.z[v1] = v ?? undefined; note(v1, v); } }
+        else if (WRITES.has(mn) && mode === "zp") { delete st.z[v1]; }
+        else if (mn === "tax") st.x = st.a; else if (mn === "tay") st.y = st.a;
+        else if (mn === "txa") st.a = st.x; else if (mn === "tya") st.a = st.y;
+        else if (mn === "inx" || mn === "dex") st.x = null; else if (mn === "iny" || mn === "dey") st.y = null;
+        else if (mn === "pha") st.s.push(st.a ?? "?"); else if (mn === "pla") { st.s.pop(); st.a = null; }
+        else if (/^(adc|sbc|and|ora|eor|asl|lsr|rol|ror|anc|alr|arr|xaa)$/.test(mn)) st.a = null;
+        let next = o + len;
+        if (hot && mode === "abs" && (v2 & 0x1000)) {
+          const h = (v2 & 0xFFF) - hot.first;
+          if (h >= 0 && h < hot.count) next = h * 4096 + (next - b.start);      // the switch takes effect at the next fetch
+        }
+        if (mode === "rel") push(toOffset((addr + 2 + (v1 << 24 >> 24)) & 0xFFFF, b), st);
+        else if (mn === "jsr") push(toOffset(v2, b), st);
+        else if (mn === "jmp" && mode === "abs") { const t = toOffset(v2, b); if (t === null) break; labels.add(t); o = t; continue; }
+        else if (mn === "jmp") {
+          const lo = st.z[v2 & 255], hi = st.z[(v2 + 1) & 255], t = lo != null && hi != null ? toOffset(lo | hi << 8, b) : null;
+          if (t !== null && plausible(t)) { labels.add(t); o = t; continue; }
+          open.push({ ptr: v2 & 255, b }); break;
+        } else if (mn === "rts") {
+          const lo = st.s.pop(), hi = st.s.pop();
+          if (typeof lo !== "number" || typeof hi !== "number") break;
+          const t = toOffset(((hi << 8 | lo) + 1) & 0xFFFF, b); if (t === null || !plausible(t)) break;
+          labels.add(t); o = t; continue;
+        }
+        if (mn === "jmp" || mn === "rti" || mn === "brk") break;
+        o = next;
+      }
+    }
+  };
+  run();
+  // Pointers set on another path: try every constant stored to them anywhere
+  for (let pass = 0, tried = new Set(); pass < 6; pass++) {
+    let added = false;
+    for (const { ptr, b } of open) {
+      const los = W.get(ptr) || [], his = W.get((ptr + 1) & 255) || [];
+      for (const lo of los) for (const hi of his) {
+        const t = toOffset(lo | hi << 8, b), id = t + "/" + ptr;
+        if (t === null || tried.has(id)) continue;
+        tried.add(id);
+        if (plausible(t)) { push(t, fresh()); added = true; }
+      }
+    }
+    if (!added) break;
+    run();
+  }
+  return { mark, labels, W };
+}
+function disassemble() {
+  const n = S.rom.length, r = S.rom, { mark, labels, W } = trace(), items = [];
+  let codeBytes = 0, o = 0;
+  while (o < n) {
+    const b = bankOf(o), addr = b.base + (o - b.start);
+    if (mark[o] === 1) {
+      const op = OPTABLE[r[o]], len = op.len, v1 = r[o + 1], v2 = v1 | r[o + 2] << 8, it = { off: o, len, addr, code: true, label: labels.has(o), op, target: null };
+      const w = WRITES.has(op.mn);
+      const nm = a => regName(a, w) || (a < 0x100 ? "$" + hex2(a) : "$" + hex4(a));
+      const rom = a => { const t = toOffset(a, b); if (t !== null) { it.target = t; return "$" + hex4(a); } return nm(a); };
+      switch (op.mode) {
+        case "imp": it.arg = ""; break;
+        case "imm": it.arg = "#$" + hex2(v1); break;
+        case "zp": it.arg = nm(v1); break;
+        case "zpx": it.arg = nm(v1) + ",X"; break;
+        case "zpy": it.arg = nm(v1) + ",Y"; break;
+        case "izx": it.arg = "($" + hex2(v1) + ",X)"; break;
+        case "izy": it.arg = "($" + hex2(v1) + "),Y"; break;
+        case "abs": it.arg = rom(v2); break;
+        case "abx": it.arg = rom(v2) + ",X"; break;
+        case "aby": it.arg = rom(v2) + ",Y"; break;
+        case "ind": it.arg = "(" + rom(v2) + ")"; break;
+        case "rel": it.arg = rom((addr + 2 + (v1 << 24 >> 24)) & 0xFFFF); break;
+      }
+      codeBytes += len; items.push(it); o += len;
+    } else {
+      let e = o + 1;
+      while (e < b.end && e % 8 !== 0 && mark[e] === 0 && !labels.has(e)) e++;
+      items.push({ off: o, len: e - o, addr, code: false, label: labels.has(o) });
+      o = e;
+    }
+  }
+  const finds = scanFinds(items, mark, W);
+  S.dis = { mark, items, codeBytes, ...finds };
+}
+const COLOR_REGS = new Set(["COLUP0", "COLUP1", "COLUPF", "COLUBK"]), GFX_REGS = new Set(["GRP0", "GRP1", "ENAM0", "ENAM1", "ENABL"]), PF_REGS = new Set(["PF0", "PF1", "PF2"]);
+function scanFinds(items, mark, W) {
+  const n = S.rom.length, colors = new Map(), tables = new Map(), recent = { a: [], x: [], y: [] };
+  const addTable = (off, kind, by) => {
+    const t = tables.get(off);
+    if (!t) tables.set(off, { off, kind, by });
+    else if (t.kind === "Data") { t.kind = kind; t.by = by; }
+  };
+  for (const it of items) {
+    if (!it.code) continue;
+    const { mn, mode } = it.op;
+    if (mn === "jmp" || mn === "rts" || mn === "rti") { recent.a = []; recent.x = []; recent.y = []; continue; }
+    if (mn === "lda" || mn === "ldx" || mn === "ldy" || (mn === "lax" && !it.op.illegal)) {
+      const k = recent[mn[2]], t = it.target;
+      if (mode === "imm") k.push({ imm: it.off + 1 });
+      else if (mode === "izy") k.push({ ptr: S.rom[it.off + 1], at: it.addr, b: bankOf(it.off) });
+      else if (t !== null && mark[t] === 0) { k.push({ table: t, at: it.addr }); addTable(t, "Data", it.addr); }
+      if (k.length > 3) k.shift();
+      continue;
+    }
+    if ((mn === "sta" || mn === "stx" || mn === "sty") && (mode === "zp" || mode === "abs")) {
+      const a = mode === "zp" ? S.rom[it.off + 1] : S.rom[it.off + 1] | S.rom[it.off + 2] << 8;
+      const reg = regName(a, true), src = recent[mn[2]];
+      if (!reg || reg === "WSYNC" || reg === "HMOVE" || reg === "VSYNC" || reg === "VBLANK") continue;
+      for (const s of src) {
+        if (s.imm !== undefined && COLOR_REGS.has(reg) && !colors.has(s.imm)) colors.set(s.imm, { off: s.imm, reg });
+        if (s.ptr !== undefined && (GFX_REGS.has(reg) || PF_REGS.has(reg) || COLOR_REGS.has(reg))) {
+          const kind = COLOR_REGS.has(reg) ? "Colors" : GFX_REGS.has(reg) ? "Sprite" : "Playfield";
+          for (const lo of W.get(s.ptr) || []) for (const hi of W.get((s.ptr + 1) & 255) || []) {
+            const t = toOffset(lo | hi << 8, s.b);
+            if (t !== null && mark[t] === 0) addTable(t, kind, s.at);
+          }
+        }
+        if (s.table !== undefined) {
+          if (COLOR_REGS.has(reg)) addTable(s.table, "Colors", s.at);
+          else if (GFX_REGS.has(reg)) addTable(s.table, "Sprite", s.at);
+          else if (PF_REGS.has(reg)) addTable(s.table, "Playfield", s.at);
+        }
+      }
+      recent[mn[2]] = [];
+    }
+  }
+  const list = [...tables.values()].sort((p, q) => p.off - q.off);
+  list.forEach((t, i) => {
+    const b = bankOf(t.off);
+    const stop = i + 1 < list.length ? Math.min(list[i + 1].off, b.end) : b.end;
+    t.len = 0;
+    for (let k = t.off; k < stop && k - t.off < 64 && mark[k] === 0; k++) t.len++;
+  });
+  for (let i = list.length - 1; i > 0; i--) {       // joins tables split by pointers into the same data
+    const p = list[i - 1], t = list[i];
+    if (p.kind === t.kind && p.off + p.len === t.off) { p.len += t.len; list.splice(i, 1); }
+  }
+  const order = { Sprite: 0, Playfield: 1, Colors: 2, Data: 3 };
+  list.sort((p, q) => order[p.kind] - order[q.kind] || p.off - q.off);
+  return { colors: [...colors.values()].sort((p, q) => p.off - q.off), tables: list };
+}
+let disTimer = 0;
+function queueDis() { clearTimeout(disTimer); disTimer = setTimeout(() => { runDis(); draw(); }, 200); }
+function runDis() { disassemble(); }
+
+/* ---------- Code view ---------- */
+const CODE_H = 20, codeScroll = $("codeScroll"), codeWin = $("codeWin");
+let codeKey = "";
+function itemIndex(off) {
+  const a = S.dis.items; let lo = 0, hi = a.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (a[m].off <= off) lo = m; else hi = m - 1; }
+  return lo;
+}
+function revealCode() { const y = itemIndex(S.sel) * CODE_H, h = codeScroll.clientHeight; if (y < codeScroll.scrollTop || y + CODE_H > codeScroll.scrollTop + h) codeScroll.scrollTop = y - h / 2; }
+function changedIn(o, len) { for (let i = 0; i < len; i++) if (S.rom[o + i] !== S.orig[o + i]) return true; return false; }
+function renderCode() {
+  const { items, codeBytes, colors, tables } = S.dis;
+  $("codeSpacer").style.height = items.length * CODE_H + "px";
+  const first = Math.max(0, Math.floor(codeScroll.scrollTop / CODE_H) - 2), count = Math.ceil(codeScroll.clientHeight / CODE_H) + 5;
+  codeWin.style.top = first * CODE_H + "px";
+  const f = document.createDocumentFragment();
+  for (let i = first; i < Math.min(items.length, first + count); i++) {
+    const it = items[i], row = document.createElement("div");
+    row.className = "crow" + (it.code ? "" : " data") + (S.sel >= it.off && S.sel < it.off + it.len ? " on" : "") + (changedIn(it.off, it.len) ? " chg" : "");
+    row.dataset.o = it.off;
+    const addr = document.createElement("span"); addr.className = "ca"; addr.textContent = (it.label ? "▸" : " ") + "$" + hex4(it.addr);
+    const by = document.createElement("span"); by.className = "cb";
+    const bytes = Array.from(S.rom.subarray(it.off, it.off + it.len), hex2);
+    by.textContent = it.code ? bytes.join(" ") : "";
+    row.append(addr, by);
+    const ins = document.createElement("span"); ins.className = "ci";
+    if (it.code) {
+      ins.textContent = it.op.mn.toUpperCase() + (it.op.illegal ? "*" : "") + " ";
+      if (it.target !== null) {
+        const t = document.createElement("button"); t.dataset.go = it.target; t.textContent = it.arg; ins.append(t);
+      } else ins.append(it.arg);
+    } else ins.textContent = ".byte " + bytes.join(" ");
+    row.append(ins); f.append(row);
+  }
+  codeWin.replaceChildren(f);
+  const pct = Math.round(codeBytes / S.rom.length * 100);
+  $("codeSummary").textContent = codeBytes.toLocaleString() + " bytes of code traced (" + pct + "%). The rest is shown as data.";
+  const key = colors.map(c => c.off + ":" + S.rom[c.off]).join() + "|" + tables.map(t => t.off + t.kind + t.len).join();
+  if (key === codeKey) return; codeKey = key;
+  const cl = $("colorList"), cf = document.createDocumentFragment();
+  colors.forEach(c => {
+    const v = S.rom[c.off], b = document.createElement("button"), chip = document.createElement("span");
+    chip.className = "colorchip"; chip.style.background = tiaColor(v); b.dataset.pick = c.off;
+    b.append(chip, " $" + hex2(v & 0xFE) + " " + c.reg + " at $" + hex4(c.off)); cf.append(b);
+  });
+  cl.replaceChildren(cf); $("colorEmpty").hidden = colors.length > 0;
+  const tl = $("tableList"), tf = document.createDocumentFragment();
+  tables.forEach(t => {
+    const b = document.createElement("button"); b.dataset.table = t.off;
+    b.textContent = t.kind + " at $" + hex4(t.off) + (t.len > 1 ? ", up to " + t.len + " bytes" : ""); tf.append(b);
+  });
+  tl.replaceChildren(tf); $("tableEmpty").hidden = tables.length > 0;
+}
+codeScroll.addEventListener("scroll", draw, { passive: true });
+codeWin.addEventListener("click", e => {
+  const go = e.target.dataset.go;
+  if (go !== undefined) return select(+go);
+  const row = e.target.closest(".crow"); if (row) select(+row.dataset.o);
+});
+$("colorList").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { select(+b.dataset.pick); byteInput.focus(); } });
+$("tableList").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { setView("grid"); select(+b.dataset.table); } });
+$("traceBtn").onclick = () => {
+  S.entries.add(S.sel); runDis(); setView("code"); select(S.sel);
+  say(S.dis.mark[S.sel] === 1 ? "Added $" + hex4(S.sel) + " as a code entry point" : "The byte at $" + hex4(S.sel) + " can't start an instruction here", S.dis.mark[S.sel] !== 1);
+};
+function buildSource() {
+  const L = ["; Disassembled by Cartbench from " + S.name, "; Assemble with: dasm source.asm -f3 -osource.bin", "    processor 6502", ""];
+  TIA_W.forEach((n, i) => L.push(n.padEnd(8) + "= $" + hex2(i)));
+  TIA_R.forEach((n, i) => L.push(n.padEnd(8) + "= $" + hex2(i)));
+  Object.entries(RIOT).forEach(([a, n]) => L.push(n.padEnd(8) + "= $" + hex4(+a)));
+  for (const it of S.dis.items) {
+    const b = bankOf(it.off);
+    if (it.off === b.start) L.push("", "    ORG $" + hex4(S.rom.length > 4096 ? 0x1000 + it.off : b.base), "    RORG $" + hex4(b.base));
+    const raw = "    .byte " + Array.from(S.rom.subarray(it.off, it.off + it.len), v => "$" + hex2(v)).join(",");
+    if (!it.code) { L.push(raw); continue; }
+    const c = it.op.mn.toUpperCase() + (it.arg ? " " + it.arg : ""), a = "; $" + hex4(it.addr);
+    // Undocumented opcodes and absolute zero-page operands have no safe text form, so keep their bytes
+    const raw3 = it.len === 3 && S.rom[it.off + 2] === 0;
+    if (it.op.illegal || raw3) L.push(raw.padEnd(30) + a + "  " + c);
+    else L.push(("    " + c).padEnd(30) + a);
+  }
+  return L.join("\n") + "\n";
+}
+$("sourceBtn").onclick = () => saveFile(baseName() + "-source.txt", new TextEncoder().encode(buildSource()), "Source exported. Rename it to .asm to assemble it with dasm.");
+
+/* ---------- Compare ---------- */
+function diffRanges(a, b) {
+  const n = Math.min(a.length, b.length), out = []; let s = -1, last = -1;
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) {
+    if (s >= 0 && i - last > 3) { out.push([s, last]); s = i; } else if (s < 0) s = i;
+    last = i;
+  }
+  if (s >= 0) out.push([s, last]);
+  return out;
+}
+function kindAt(off) {
+  const t = S.dis.tables.find(x => off >= x.off && off < x.off + Math.max(1, x.len));
+  if (t) return t.kind;
+  return S.dis.mark[off] ? "Code" : "Data";
+}
+function bits(canvas, bytes, base, other) {
+  const px = 7, rows = bytes.length; canvas.width = 8 * px + 1; canvas.height = rows * px;
+  const c = canvas.getContext("2d");
+  c.fillStyle = "#0d0a08"; c.fillRect(0, 0, canvas.width, canvas.height);
+  bytes.forEach((v, r) => { for (let b = 0; b < 8; b++) {
+    const m = 128 >> b, diff = (v ^ other[r]) & m;
+    if (v & m) { c.fillStyle = diff ? "#ff7a59" : tiaColor(S.ink); c.fillRect(b * px, r * px, px - 1, px - 1); }
+    else if (diff) { c.fillStyle = "#5c2c20"; c.fillRect(b * px, r * px, px - 1, px - 1); }
+  } });
+}
+function renderCompare() {
+  const B = S.cmp && S.cmp.bytes, box = $("cmpList"), f = document.createDocumentFragment();
+  $("cmpEmpty").hidden = !!B; $("cmpBody").hidden = !B;
+  if (!B) return;
+  const ranges = diffRanges(S.rom, B), total = ranges.reduce((t, [a, b]) => { for (let i = a; i <= b; i++) if (S.rom[i] !== B[i]) t++; return t; }, 0);
+  const sizeNote = S.rom.length !== B.length ? " Sizes differ, so only the first " + Math.min(S.rom.length, B.length).toLocaleString() + " bytes are compared." : "";
+  $("cmpSummary").textContent = total ? total + (total === 1 ? " byte differs" : " bytes differ") + " from " + S.cmp.name + " in " + ranges.length + (ranges.length === 1 ? " place." : " places.") + sizeNote : "No differences from " + S.cmp.name + "." + sizeNote;
+  $("applyAllBtn").disabled = !total;
+  if (S.cmpSel >= ranges.length) S.cmpSel = 0;
+  ranges.slice(0, 200).forEach(([a, b], i) => {
+    const li = document.createElement("div"); li.className = "cmprow" + (i === S.cmpSel ? " on" : "");
+    const s = document.createElement("button"); s.className = "jump"; s.dataset.i = i;
+    s.textContent = "$" + hex4(a) + (b > a ? "–$" + hex4(b) : "") + "  " + kindAt(a);
+    const ap = document.createElement("button"); ap.className = "rev"; ap.dataset.a = a; ap.dataset.b = b; ap.textContent = "Apply";
+    li.append(s, ap); f.append(li);
+  });
+  box.replaceChildren(f);
+  const r = ranges[S.cmpSel]; $("cmpPreview").hidden = !r;
+  if (r) {
+    const a = Math.max(0, r[0] - 2), e = Math.min(S.rom.length, B.length, r[1] + 3), mine = [...S.rom.subarray(a, Math.min(e, a + 48))], theirs = [...B.subarray(a, Math.min(e, a + 48))];
+    bits($("cmpA"), mine, a, theirs); bits($("cmpB"), theirs, a, mine);
+    $("cmpBLabel").textContent = S.cmp.name; 
+  }
+}
+$("cmpList").addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.i !== undefined) { S.cmpSel = +t.dataset.i; const r = diffRanges(S.rom, S.cmp.bytes)[S.cmpSel]; select(r[0]); }
+  if (t.dataset.a !== undefined) { for (let i = +t.dataset.a; i <= +t.dataset.b; i++) setByte(i, S.cmp.bytes[i]); S.syncInput = true; commit(); say("Applied those bytes to your ROM"); }
+});
+$("applyAllBtn").onclick = () => {
+  const B = S.cmp.bytes, n = Math.min(S.rom.length, B.length);
+  for (let i = 0; i < n; i++) if (S.rom[i] !== B[i]) setByte(i, B[i]);
+  S.syncInput = true; commit(); say("Applied every difference. Undo reverses this in one step.");
+};
+$("cmpOpenBtn").onclick = () => $("cmpInput").click();
+$("cmpEmptyBtn").onclick = () => $("cmpInput").click();
+$("cmpInput").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer()), err = validate(bytes);
+    if (err) return say(err, true);
+    S.cmp = { name: f.name, bytes }; S.cmpSel = 0; setView("compare"); say("Comparing with " + f.name);
+  } catch (x) { say("That file could not be read. Try choosing it again.", true); }
+};
+
+/* ---------- Views ---------- */
+function setView(v) {
+  S.view = v;
+  $("gridView").hidden = v !== "grid"; $("codeView").hidden = v !== "code"; $("compareView").hidden = v !== "compare";
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.view === v));
+  renderAll();                    // sizes exist only once the view is shown
+  if (v === "grid") ensureVisible();
+  if (v === "code") revealCode();
+  draw();
+}
+document.querySelectorAll(".tab").forEach(t => { t.onclick = () => setView(t.dataset.view); });
+
+/* ---------- Emulator ---------- */
+let emu = null, runTimer = 0, running = false;
+const emuError = msg => { const m = $("screenMsg"); m.textContent = msg; m.hidden = false; };
+function initEmu() {
+  const SE = window.$6502 && window.$6502.Stellerator;
+  if (!SE) { $("emuPanel").hidden = true; $("emuCredit").hidden = true; return; }     // the published page ships without the emulator
+  try {
+    emu = new SE($("screen"), "worker/stellerator.js", {
+      tvEmulation: SE.TvEmulation.none, phosphorLevel: 0, scanlineLevel: 0, scalingMode: SE.ScalingMode.qis,
+      volume: 0.3, keyboardTarget: $("screenWrap"), fullscreenViaKeyboard: false, pauseViaKeyboard: false, pauseViaTouch: false, fullscreenViaTouch: false
+    });
+    emu.frequencyUpdate.addHandler(f => { $("speed").textContent = (f / 1e6).toFixed(2) + " MHz"; });
+    emu.stateChange.addHandler(onEmuState);
+    addEventListener("resize", () => { if (emu && !emu.isFullscreen()) emu.resize(); });
+  } catch (e) { emu = null; emuError("This browser couldn't start the emulator. Editing and export still work."); }
+}
+function onEmuState(st) {
+  const SE = window.$6502.Stellerator;
+  running = st === SE.State.running;
+  $("pauseBtn").textContent = st === SE.State.paused ? "Resume" : "Pause";
+  if (st === SE.State.error) {
+    $("speed").textContent = "";
+    emuError("This ROM stopped the emulator. If you edited code bytes, undo that change, then press Restart.");
+  } else if (running) $("screenMsg").hidden = true;
+}
+async function runRom() {
+  if (!emu) return;
+  clearTimeout(runTimer);
+  try {
+    const SE = window.$6502.Stellerator, tv = $("tvMode").value === "pal" ? SE.TvMode.pal : SE.TvMode.ntsc;
+    await emu.run(Array.from(S.rom), tv);
+    onEmuState(emu.getState());
+  } catch (e) { emuError("This ROM couldn't be started. Its format may not be supported."); }
+}
+function romEdited() {
+  queueDis();
+  if (!emu || !$("autoRun").checked) return;
+  clearTimeout(runTimer); runTimer = setTimeout(runRom, 350);
+}
+$("restartBtn").onclick = () => { $("screenMsg").hidden = true; runRom(); };
+$("pauseBtn").onclick = () => { if (emu) running ? emu.pause().then(onEmuState) : emu.resume().then(onEmuState); };
+$("tvMode").onchange = runRom;
+$("vol").oninput = e => { if (emu) emu.setVolume(e.target.value / 100); };
+$("screenWrap").addEventListener("pointerdown", () => $("screenWrap").focus());
+$("screenWrap").addEventListener("keydown", e => { if (e.key.startsWith("Arrow") || e.key === " ") e.preventDefault(); });
+[["selectSw", "select"], ["resetSw", "reset"]].forEach(([id, sw]) => {
+  const b = $(id), set = v => { if (emu) emu.getControlPanel()[sw]().toggle(v); };
+  b.addEventListener("pointerdown", () => set(true));
+  ["pointerup", "pointerleave", "pointercancel"].forEach(n => b.addEventListener(n, () => set(false)));
+});
+
+setInk(S.ink);
+initEmu();
+open("Sample cart", sampleRom(), true);
+say(emu ? "Sample running. Change a pixel of the invader at $0300 and watch the screen." : "Sample loaded. Click a pixel to change it, or open your own ROM.");
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+</script>
+
+</body></html>
