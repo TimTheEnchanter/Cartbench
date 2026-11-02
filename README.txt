@@ -7,6 +7,9 @@ start the emulator's background worker from a file opened directly.
 2. Run:  python3 -m http.server 8000
 3. Visit http://localhost:8000
 
+Recordings and Trace points are saved in your browser for this address, so keep
+using the same port. Clearing site data removes them.
+
 Exported ROMs download as plain .bin or .a26 files in this version.
 
 The folder can also be hosted as-is on any static web host, such as GitHub Pages.

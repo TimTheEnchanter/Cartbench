@@ -435,7 +435,9 @@ function describeSize(n) {
 function open(name, bytes, sample) {
   Object.assign(S, { name, sample, orig: bytes.slice(), rom: bytes.slice(), sel: 0, undo: [], redo: [], tx: null, entries: new Set(), cmpSel: 0, live: new Uint8Array(bytes.length), liveBad: 0, liveTot: 0 });
   S.cmp = sample ? { name: "Sample hack", bytes: sampleHack(bytes) } : null;
+  S.restored = sample ? false : loadRecording();
   runDis();
+  renderLive();
   renderInfo(); layout(); scroller.scrollTop = 0;
   if (sample) { S.sel = 0x300; S.flip = false; $("flip").checked = false; layout(); scroller.scrollTop = 0x2F8 * S.px; }
   runRom();
@@ -453,13 +455,36 @@ async function loadFile(f) {
     const err = validate(bytes);
     if (err) return say(err, true);
     open(f.name, bytes, false);
-    say("Opened " + f.name + ". Sprites are often stored upside down, so try that option if shapes look wrong.");
+    say("Opened " + f.name + (S.restored ? " and restored its saved recording." : ". Sprites are often stored upside down, so try that option if shapes look wrong."));
   } catch (e) { say("That file could not be read. Try choosing it again.", true); }
 }
 function renderInfo() {
   const el = $("fileInfo"); el.textContent = "";
   const b = document.createElement("b"); b.textContent = S.name; el.append(b, " · " + describeSize(S.rom.length) + " ");
   if (S.sample) { const t = document.createElement("span"); t.className = "sample"; t.textContent = "Sample cart, made for Cartbench"; el.append(t); }
+}
+
+/* ---------- Saved recordings: kept in this browser, one per original ROM ---------- */
+const recKey = () => "cartbench:rec:" + S.orig.length + ":" + crc32(S.orig).toString(16);
+function toB64(b) { let t = ""; for (let i = 0; i < b.length; i += 8192) t += String.fromCharCode.apply(null, b.subarray(i, i + 8192)); return btoa(t); }
+function fromB64(t) { const s = atob(t), b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+function loadRecording() {
+  try {
+    const raw = localStorage.getItem(recKey()); if (!raw) return false;
+    const r = JSON.parse(raw), live = fromB64(r.live);
+    if (r.v !== 1 || live.length !== S.rom.length) return false;
+    S.live = live;
+    (r.entries || []).forEach(o => { if (Number.isInteger(o) && o >= 0 && o < S.rom.length) S.entries.add(o); });
+    return true;
+  } catch (e) { return false; }
+}
+function saveRecording() {
+  if (S.sample) return;
+  try {
+    if (!S.live.some(v => v) && !S.entries.size) { localStorage.removeItem(recKey()); return; }
+    localStorage.setItem(recKey(), JSON.stringify({ v: 1, live: toB64(S.live), entries: [...S.entries], saved: Date.now() }));
+    S.saveFailed = false;
+  } catch (e) { S.saveFailed = true; }
 }
 
 /* ---------- Export: .bin is not an allowed save type here, so the ROM ships in a zip ---------- */
@@ -1112,7 +1137,7 @@ codeWin.addEventListener("click", e => {
 $("colorList").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { select(+b.dataset.pick); byteInput.focus(); } });
 $("finds").addEventListener("click", e => { const b = e.target.closest(".trow"); if (b) { setView("grid"); select(+b.dataset.table); } });
 $("traceBtn").onclick = () => {
-  S.entries.add(S.sel); runDis(); setView("code"); select(S.sel);
+  S.entries.add(S.sel); saveRecording(); runDis(); setView("code"); select(S.sel);
   say(S.dis.mark[S.sel] === 1 ? "Added $" + hex4(S.sel) + " as a code entry point" : "The byte at $" + hex4(S.sel) + " can't start an instruction here", S.dis.mark[S.sel] !== 1);
 };
 function buildSource() {
@@ -1228,19 +1253,23 @@ function configRecorder() {
 }
 function takeCoverage(m) {
   if (m.gen !== liveGen || m.cbCov.length !== S.rom.length) return;   // late data from an earlier run
+  S.liveBad = m.bad; S.liveTot = m.tot;
+  if (recordingBad()) return renderLive();      // unreliable data never reaches the trace or storage
   let changed = false;
   for (let i = 0; i < m.cbCov.length; i++) { const v = baseLive[i] | m.cbCov[i]; if (v !== S.live[i]) { S.live[i] = v; changed = true; } }
-  S.liveBad = m.bad; S.liveTot = m.tot;
   renderLive();
-  if (changed && !liveTimer) liveTimer = setTimeout(() => { liveTimer = 0; runDis(); draw(); }, 2500);
+  if (changed && !liveTimer) liveTimer = setTimeout(() => { liveTimer = 0; saveRecording(); renderLive(); runDis(); draw(); }, 2500);
 }
+// Reads that disagree with the ROM mean the recorder has the banks wrong
+const recordingBad = () => S.liveTot > 20000 && S.liveBad / S.liveTot > 0.001;
 function renderLive() {
   let ran = 0, spr = 0, pf = 0, col = 0;
   for (const v of S.live) { if (v & 1) ran++; if (v & 4) spr++; if (v & 8) pf++; if (v & 16) col++; }
   S.liveRan = ran; S.liveSeen = spr + pf + col;
   const el = $("liveInfo");
-  if (S.liveTot > 2000 && S.liveBad / S.liveTot > 0.01) el.textContent = "This game's bank switching isn't one the recorder understands, so don't trust these results.";
-  else el.textContent = "Recorded: " + ran.toLocaleString() + " instructions, " + spr.toLocaleString() + " sprite, " + pf.toLocaleString() + " playfield and " + col.toLocaleString() + " color bytes. Play more of the game to find more.";
+  if (recordingBad()) { el.textContent = "Recording is off for this run: this game's bank switching isn't one the recorder understands. Nothing from this run was kept."; return; }
+  if (!ran) { el.textContent = "Recording starts when the game runs. Play more of the game to find more."; return; }
+  el.textContent = "Recorded: " + ran.toLocaleString() + " instructions, " + spr.toLocaleString() + " sprite, " + pf.toLocaleString() + " playfield and " + col.toLocaleString() + " color bytes." + (S.saveFailed ? " This browser couldn't save it, so it will be lost on reload." : S.sample ? "" : " Saved in this browser.") + " Play more of the game to find more.";
 }
 const emuError = msg => { const m = $("screenMsg"); m.textContent = msg; m.hidden = false; };
 function initEmu() {
@@ -1291,7 +1320,7 @@ function romEdited() {
   if (!emu || !$("autoRun").checked) return;
   clearTimeout(runTimer); runTimer = setTimeout(runRom, 350);
 }
-$("liveClear").onclick = () => { S.live.fill(0); baseLive = S.live.slice(); renderLive(); runRom(); runDis(); draw(); say("Recording cleared"); };
+$("liveClear").onclick = () => { S.live.fill(0); baseLive = S.live.slice(); saveRecording(); renderLive(); runRom(); runDis(); draw(); say("Recording cleared"); };
 $("restartBtn").onclick = () => { $("screenMsg").hidden = true; runRom(); };
 $("pauseBtn").onclick = () => { if (emu) running ? emu.pause().then(onEmuState) : emu.resume().then(onEmuState); };
 $("tvMode").onchange = runRom;
