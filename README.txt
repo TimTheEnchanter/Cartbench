@@ -14,4 +14,6 @@ The folder can also be hosted as-is on any static web host, such as GitHub Pages
 stellerator-embedded.js and worker/stellerator.js are the prebuilt Stellerator
 files from the 6502ts/6502ts.github.io repository, MIT license, copyright
 Christian Speckner and contributors. See stellerator-LICENSE.txt.
+worker/stellerator.js has a small activity recorder added by tools/patch-worker.py.
+It records which ROM bytes run and reach the display. Nothing leaves your browser.
 sample-cart.asm is the source of the built-in sample (assemble with dasm).
